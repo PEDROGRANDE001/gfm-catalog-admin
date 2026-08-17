@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Going for Milk - Catalog Admin</title>
+<style>
+  :root {
+    --bg: #0f141b; --panel: #161d27; --panel2: #1c2430; --line: #232a35;
+    --txt: #e7ecf3; --muted: #8a97a8; --accent: #f5a623; --accent2: #3aa0ff;
+    --danger: #ff5a5a; --ok: #37c871;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--txt);
+    font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  header {
+    position: sticky; top: 0; z-index: 10; background: var(--panel);
+    border-bottom: 1px solid var(--line); padding: 14px 20px;
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  header h1 { font-size: 17px; margin: 0; font-weight: 800; }
+  header .status { font-size: 13px; color: var(--muted); margin-left: auto; }
+  header .status.ok { color: var(--ok); }
+  header .status.err { color: var(--danger); }
+  .tabs { display: flex; gap: 8px; }
+  .tab {
+    background: var(--panel2); border: 1px solid var(--line); color: var(--txt);
+    padding: 7px 14px; border-radius: 999px; cursor: pointer; font-weight: 700; font-size: 13px;
+  }
+  .tab.on { background: var(--accent); color: #1a1205; border-color: var(--accent); }
+  main { padding: 20px; max-width: 1200px; margin: 0 auto; }
+  .scopebar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+  .chip {
+    background: var(--panel2); border: 1px solid var(--line); color: var(--txt);
+    padding: 5px 11px; border-radius: 999px; cursor: pointer; font-size: 12px; font-weight: 700;
+  }
+  .chip.on { background: var(--accent2); color: #04121f; border-color: var(--accent2); }
+  .catblock { margin-bottom: 30px; }
+  .catblock h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 10px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 700; }
+  td input, td textarea, td select {
+    width: 100%; background: var(--panel2); border: 1px solid var(--line); color: var(--txt);
+    border-radius: 7px; padding: 6px 8px; font: inherit; font-size: 13px; resize: vertical;
+  }
+  td.num input { text-align: right; }
+  td.chk { text-align: center; }
+  td.act { white-space: nowrap; }
+  .btn {
+    background: var(--panel2); border: 1px solid var(--line); color: var(--txt);
+    padding: 7px 13px; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 13px;
+  }
+  .btn:hover { border-color: var(--muted); }
+  .btn.primary { background: var(--accent); color: #1a1205; border-color: var(--accent); }
+  .btn.danger { background: transparent; color: var(--danger); border-color: transparent; padding: 6px 8px; }
+  .btn.add { color: var(--accent2); border-color: var(--accent2); background: transparent; margin-top: 8px; }
+  .rowactions { display: flex; gap: 10px; align-items: center; margin: 18px 0 6px; }
+  .rowactions .spacer { flex: 1; }
+  .savebar {
+    position: sticky; bottom: 0; background: var(--panel); border-top: 1px solid var(--line);
+    padding: 12px 20px; display: flex; gap: 12px; align-items: center; margin: 0 -20px -20px;
+  }
+  .savebar .msg { font-size: 13px; color: var(--muted); }
+  .savebar .msg.ok { color: var(--ok); }
+  .savebar .msg.err { color: var(--danger); }
+  .dirty { color: var(--accent); font-weight: 700; }
+  .colid { width: 150px; }
+  .colnum { width: 90px; }
+  .colcat { width: 130px; }
+  .coltier { width: 110px; }
+  .colchk { width: 60px; }
+  .colact { width: 60px; }
+  a { color: var(--accent2); }
+  .hint { color: var(--muted); font-size: 12px; margin: 0 0 14px; }
+  #gate {
+    position: fixed; inset: 0; z-index: 100; background: var(--bg);
+    display: flex; align-items: center; justify-content: center; padding: 24px;
+  }
+  #gate .box {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    padding: 28px; width: 100%; max-width: 340px; text-align: center;
+  }
+  #gate h2 { margin: 0 0 6px; font-size: 18px; }
+  #gate p { margin: 0 0 18px; color: var(--muted); font-size: 13px; }
+  #gate input {
+    width: 100%; background: var(--panel2); border: 1px solid var(--line); color: var(--txt);
+    border-radius: 9px; padding: 11px 12px; font: inherit; font-size: 15px; margin-bottom: 12px;
+  }
+  #gate button {
+    width: 100%; background: var(--accent); color: #1a1205; border: none;
+    border-radius: 9px; padding: 11px; font: inherit; font-weight: 800; cursor: pointer;
+  }
+  #gate .err { color: var(--danger); font-size: 12px; min-height: 16px; margin-top: 10px; }
+  body.locked { overflow: hidden; }
+</style>
+</head>
+<body class="locked">
+<div id="gate">
+  <div class="box">
+    <h2>Going for Milk</h2>
+    <p>Catalog admin. Enter the passcode to continue.</p>
+    <input id="gate-input" type="password" placeholder="Passcode" autocomplete="off" />
+    <button id="gate-go">Enter</button>
+    <div class="err" id="gate-err"></div>
+  </div>
+</div>
+<header>
+  <h1>Going for Milk - Catalog Admin</h1>
+  <div class="tabs">
+    <button class="tab on" id="tab-gear">Gear</button>
+    <button class="tab" id="tab-upgrades">Bike Upgrades</button>
+  </div>
+  <span class="status" id="status">connecting…</span>
+</header>
+
+<main>
+  <p class="hint" id="hint"></p>
+  <div id="scopebar" class="scopebar" style="display:none"></div>
+  <div id="content"></div>
+  <div class="savebar">
+    <button class="btn primary" id="save">Save changes</button>
+    <button class="btn" id="reload">Reload</button>
+    <span class="msg" id="msg"></span>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+const SUPABASE_URL = "https://rtwzlkymabujfsnobipl.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_7z5_6oZEVl-poPycyYJ1zA_FjdebGQZ";
+
+const KIT_CATEGORIES = [
+  { id: "gear", label: "Riding Gear" },
+  { id: "luggage", label: "Luggage" },
+  { id: "electronics", label: "Electronics" },
+  { id: "camping", label: "Camping" },
+];
+
+const BIKES = [
+  { id: "universal", name: "Universal (all bikes)" },
+  { id: "dr650", name: "Suzuki DR650" },
+  { id: "drz400", name: "Suzuki DR-Z400S / SM" },
+  { id: "xr650l", name: "Honda XR650L" },
+  { id: "crf300l", name: "Honda CRF300L" },
+  { id: "crf300l_rally", name: "Honda CRF300L Rally" },
+  { id: "klr650", name: "Kawasaki KLR650" },
+  { id: "wr250r", name: "Yamaha WR250R" },
+  { id: "xt250", name: "Yamaha XT250" },
+  { id: "ktm_exc_350_450", name: "KTM 350 / 450 EXC-F" },
+  { id: "ktm_exc_500", name: "KTM 500 EXC-F" },
+  { id: "beta_500rrs", name: "Beta 500 RR-S" },
+  { id: "ktm690", name: "KTM 690 Enduro R" },
+  { id: "husky701", name: "Husqvarna 701 Enduro" },
+  { id: "tenere700", name: "Yamaha Tenere 700" },
+  { id: "f850gs", name: "BMW F800GS / F850GS" },
+  { id: "himalayan", name: "Royal Enfield Himalayan" },
+  { id: "africa_twin", name: "Honda Africa Twin" },
+  { id: "xr650r", name: "Honda XR650R" },
+  { id: "dr350", name: "Suzuki DR350" },
+];
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const statusEl = document.getElementById("status");
+const contentEl = document.getElementById("content");
+const scopebarEl = document.getElementById("scopebar");
+const msgEl = document.getElementById("msg");
+const hintEl = document.getElementById("hint");
+
+let mode = "gear";          // "gear" | "upgrades"
+let upgradeScope = "universal";
+let gearRows = [];          // working copy
+let upgradeRows = [];       // working copy (current scope only)
+let removedIds = new Set(); // ids deleted in this session, per table flush
+let loadedIds = new Set();  // ids that existed on load (to detect removals)
+
+function uid(prefix) {
+  return prefix + "-" + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-3);
+}
+function setStatus(txt, cls) {
+  statusEl.textContent = txt;
+  statusEl.className = "status" + (cls ? " " + cls : "");
+}
+function setMsg(txt, cls) {
+  msgEl.textContent = txt;
+  msgEl.className = "msg" + (cls ? " " + cls : "");
+}
+
+// ---------------- GEAR ----------------
+async function loadGear() {
+  setMsg("");
+  const { data, error } = await sb.from("gear").select("*").order("sort_order", { ascending: true });
+  if (error) { setStatus("read error", "err"); setMsg(error.message, "err"); return; }
+  gearRows = (data || []).map(r => ({
+    id: r.id, category: r.category || "gear", name: r.name || "", note: r.note || "",
+    price_usd: r.price_usd == null ? 0 : Number(r.price_usd), url: r.url || "", search: r.search || "",
+    optional: !!r.optional, specific: !!r.specific, slot: r.slot || "",
+  }));
+  loadedIds = new Set(gearRows.map(r => r.id));
+  removedIds = new Set();
+  setStatus("connected · " + gearRows.length + " gear rows", "ok");
+  renderGear();
+}
+
+function renderGear() {
+  scopebarEl.style.display = "none";
+  hintEl.textContent = "Edit any cell. Rows save in the order shown (top to bottom). Add rows per category, delete with ✕. Changes push live to phones on Save.";
+  const byCat = {};
+  KIT_CATEGORIES.forEach(c => byCat[c.id] = []);
+  gearRows.forEach(r => { (byCat[r.category] ||= []).push(r); });
+  let html = "";
+  KIT_CATEGORIES.forEach(cat => {
+    const rows = byCat[cat.id] || [];
+    html += `<div class="catblock"><h2>${cat.label} (${rows.length})</h2>
+      <table><thead><tr>
+        <th class="colid">id</th><th>name</th><th>note</th>
+        <th class="colnum">price $</th><th>url</th><th>search</th>
+        <th class="colchk">opt</th><th class="colchk">spec</th><th class="coltier">slot</th><th class="colact"></th>
+      </tr></thead><tbody>`;
+    rows.forEach(r => {
+      const i = gearRows.indexOf(r);
+      html += `<tr>
+        <td class="colid"><input value="${esc(r.id)}" data-i="${i}" data-f="id"></td>
+        <td><input value="${esc(r.name)}" data-i="${i}" data-f="name"></td>
+        <td><textarea rows="2" data-i="${i}" data-f="note">${esc(r.note)}</textarea></td>
+        <td class="num colnum"><input type="number" step="1" value="${r.price_usd}" data-i="${i}" data-f="price_usd"></td>
+        <td><input value="${esc(r.url)}" data-i="${i}" data-f="url"></td>
+        <td><input value="${esc(r.search)}" data-i="${i}" data-f="search"></td>
+        <td class="chk colchk"><input type="checkbox" ${r.optional ? "checked" : ""} data-i="${i}" data-f="optional"></td>
+        <td class="chk colchk"><input type="checkbox" ${r.specific ? "checked" : ""} data-i="${i}" data-f="specific"></td>
+        <td class="coltier"><input value="${esc(r.slot)}" data-i="${i}" data-f="slot"></td>
+        <td class="act colact"><button class="btn danger" data-del="${i}" data-t="gear">✕</button></td>
+      </tr>`;
+    });
+    html += `</tbody></table>
+      <button class="btn add" data-add="${cat.id}">+ Add ${cat.label} item</button></div>`;
+  });
+  contentEl.innerHTML = html;
+  wireGearInputs();
+}
+
+function wireGearInputs() {
+  contentEl.querySelectorAll("input,textarea").forEach(el => {
+    el.addEventListener("input", () => {
+      const i = +el.dataset.i, f = el.dataset.f;
+      if (i == null || !f) return;
+      if (f === "optional" || f === "specific") gearRows[i][f] = el.checked;
+      else if (f === "price_usd") gearRows[i][f] = Number(el.value) || 0;
+      else gearRows[i][f] = el.value;
+      markDirty();
+    });
+  });
+  contentEl.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", () => {
+    const i = +b.dataset.del;
+    const row = gearRows[i];
+    if (!confirm("Delete gear row \"" + (row.name || row.id) + "\"?")) return;
+    if (loadedIds.has(row.id)) removedIds.add(row.id);
+    gearRows.splice(i, 1);
+    renderGear(); markDirty();
+  }));
+  contentEl.querySelectorAll("[data-add]").forEach(b => b.addEventListener("click", () => {
+    const cat = b.dataset.add;
+    gearRows.push({ id: uid(cat), category: cat, name: "", note: "", price_usd: 0, url: "", search: "", optional: false, specific: false, slot: "" });
+    renderGear(); markDirty();
+  }));
+}
+
+async function saveGear() {
+  // Validate ids unique + non-empty.
+  const ids = gearRows.map(r => r.id.trim());
+  if (ids.some(x => !x)) { setMsg("Every row needs an id.", "err"); return; }
+  if (new Set(ids).size !== ids.length) { setMsg("Duplicate ids. Ids must be unique.", "err"); return; }
+  setMsg("Saving…");
+  // Delete removed rows first.
+  for (const id of removedIds) {
+    const { error } = await sb.from("gear").delete().eq("id", id);
+    if (error) { setMsg("Delete failed: " + error.message, "err"); return; }
+  }
+  const payload = gearRows.map((r, i) => ({
+    id: r.id.trim(), category: r.category, name: r.name, note: r.note || null,
+    price_usd: Number(r.price_usd) || 0, url: r.url || null, search: r.search || null,
+    optional: !!r.optional, specific: !!r.specific, slot: r.slot || null, sort_order: i,
+  }));
+  const { error } = await sb.from("gear").upsert(payload);
+  if (error) { setMsg("Save failed: " + error.message, "err"); return; }
+  setMsg("Saved " + payload.length + " gear rows. Live on phones now.", "ok");
+  await loadGear();
+}
+
+// ---------------- BIKE UPGRADES ----------------
+async function loadUpgrades() {
+  setMsg("");
+  const bikeId = upgradeScope === "universal" ? null : upgradeScope;
+  let q = sb.from("bike_upgrades").select("*").order("sort_order", { ascending: true });
+  q = bikeId === null ? q.is("bike_id", null) : q.eq("bike_id", bikeId);
+  const { data, error } = await q;
+  if (error) { setStatus("read error", "err"); setMsg(error.message, "err"); return; }
+  upgradeRows = (data || []).map(r => ({
+    id: r.id, item: r.item || "", why: r.why || "",
+    price_usd: r.price_usd == null ? "" : Number(r.price_usd),
+    tier: r.tier || "", url: r.url || "", search: r.search || "",
+  }));
+  loadedIds = new Set(upgradeRows.map(r => r.id));
+  removedIds = new Set();
+  setStatus("connected · " + upgradeRows.length + " rows", "ok");
+  renderUpgrades();
+}
+
+function renderScopebar() {
+  scopebarEl.style.display = "flex";
+  scopebarEl.innerHTML = BIKES.map(b =>
+    `<button class="chip ${b.id === upgradeScope ? "on" : ""}" data-scope="${b.id}">${esc(b.name)}</button>`
+  ).join("");
+  scopebarEl.querySelectorAll("[data-scope]").forEach(c => c.addEventListener("click", async () => {
+    if (isDirty && !confirm("Discard unsaved changes and switch bike?")) return;
+    upgradeScope = c.dataset.scope; isDirty = false;
+    await loadUpgrades();
+  }));
+}
+
+function renderUpgrades() {
+  renderScopebar();
+  const name = (BIKES.find(b => b.id === upgradeScope) || {}).name || upgradeScope;
+  hintEl.textContent = "Upgrades for: " + name + ". Universal upgrades apply to every bike on top of its bike-specific list.";
+  let html = `<div class="catblock"><h2>${esc(name)} (${upgradeRows.length})</h2>
+    <table><thead><tr>
+      <th class="colid">id</th><th>item</th><th>why</th>
+      <th class="colnum">price $</th><th class="coltier">tier</th><th>url</th><th>search</th><th class="colact"></th>
+    </tr></thead><tbody>`;
+  upgradeRows.forEach((r, i) => {
+    html += `<tr>
+      <td class="colid"><input value="${esc(r.id)}" data-i="${i}" data-f="id"></td>
+      <td><input value="${esc(r.item)}" data-i="${i}" data-f="item"></td>
+      <td><textarea rows="2" data-i="${i}" data-f="why">${esc(r.why)}</textarea></td>
+      <td class="num colnum"><input type="number" step="1" value="${r.price_usd}" data-i="${i}" data-f="price_usd"></td>
+      <td class="coltier"><input value="${esc(r.tier)}" data-i="${i}" data-f="tier"></td>
+      <td><input value="${esc(r.url)}" data-i="${i}" data-f="url"></td>
+      <td><input value="${esc(r.search)}" data-i="${i}" data-f="search"></td>
+      <td class="act colact"><button class="btn danger" data-del="${i}">✕</button></td>
+    </tr>`;
+  });
+  html += `</tbody></table><button class="btn add" data-addup="1">+ Add upgrade</button></div>`;
+  contentEl.innerHTML = html;
+  wireUpgradeInputs();
+}
+
+function wireUpgradeInputs() {
+  contentEl.querySelectorAll("input,textarea").forEach(el => {
+    el.addEventListener("input", () => {
+      const i = +el.dataset.i, f = el.dataset.f;
+      if (i == null || !f) return;
+      if (f === "price_usd") upgradeRows[i][f] = el.value === "" ? "" : (Number(el.value) || 0);
+      else upgradeRows[i][f] = el.value;
+      markDirty();
+    });
+  });
+  contentEl.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", () => {
+    const i = +b.dataset.del, row = upgradeRows[i];
+    if (!confirm("Delete upgrade \"" + (row.item || row.id) + "\"?")) return;
+    if (loadedIds.has(row.id)) removedIds.add(row.id);
+    upgradeRows.splice(i, 1);
+    renderUpgrades(); markDirty();
+  }));
+  contentEl.querySelectorAll("[data-addup]").forEach(b => b.addEventListener("click", () => {
+    const p = upgradeScope === "universal" ? "u" : upgradeScope;
+    upgradeRows.push({ id: uid(p), item: "", why: "", price_usd: "", tier: "", url: "", search: "" });
+    renderUpgrades(); markDirty();
+  }));
+}
+
+async function saveUpgrades() {
+  const ids = upgradeRows.map(r => r.id.trim());
+  if (ids.some(x => !x)) { setMsg("Every row needs an id.", "err"); return; }
+  if (new Set(ids).size !== ids.length) { setMsg("Duplicate ids. Ids must be unique.", "err"); return; }
+  setMsg("Saving…");
+  for (const id of removedIds) {
+    const { error } = await sb.from("bike_upgrades").delete().eq("id", id);
+    if (error) { setMsg("Delete failed: " + error.message, "err"); return; }
+  }
+  const bikeId = upgradeScope === "universal" ? null : upgradeScope;
+  const payload = upgradeRows.map((r, i) => ({
+    id: r.id.trim(), bike_id: bikeId, item: r.item, why: r.why || "",
+    price_usd: r.price_usd === "" ? null : (Number(r.price_usd) || 0),
+    tier: r.tier || null, url: r.url || null, search: r.search || null, sort_order: i,
+  }));
+  const { error } = await sb.from("bike_upgrades").upsert(payload);
+  if (error) { setMsg("Save failed: " + error.message, "err"); return; }
+  setMsg("Saved " + payload.length + " upgrades. Live on phones now.", "ok");
+  await loadUpgrades();
+}
+
+// ---------------- shared ----------------
+let isDirty = false;
+function markDirty() { isDirty = true; setMsg("Unsaved changes.", ""); msgEl.classList.add("dirty"); }
+function esc(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+document.getElementById("tab-gear").addEventListener("click", async () => {
+  if (isDirty && !confirm("Discard unsaved changes?")) return;
+  mode = "gear"; isDirty = false;
+  document.getElementById("tab-gear").classList.add("on");
+  document.getElementById("tab-upgrades").classList.remove("on");
+  await loadGear();
+});
+document.getElementById("tab-upgrades").addEventListener("click", async () => {
+  if (isDirty && !confirm("Discard unsaved changes?")) return;
+  mode = "upgrades"; isDirty = false;
+  document.getElementById("tab-upgrades").classList.add("on");
+  document.getElementById("tab-gear").classList.remove("on");
+  await loadUpgrades();
+});
+document.getElementById("save").addEventListener("click", async () => {
+  document.getElementById("save").disabled = true;
+  try { mode === "gear" ? await saveGear() : await saveUpgrades(); isDirty = false; }
+  finally { document.getElementById("save").disabled = false; }
+});
+document.getElementById("reload").addEventListener("click", async () => {
+  if (isDirty && !confirm("Discard unsaved changes and reload?")) return;
+  isDirty = false;
+  mode === "gear" ? await loadGear() : await loadUpgrades();
+});
+
+// ---------------- passcode gate ----------------
+// Simple shared-passcode gate. This keeps casual visitors out of the editor.
+// It is NOT hard security: the page talks to Supabase with the public anon key,
+// so real lockdown would need Supabase Auth + tighter RLS. Change PASSCODE below
+// (and re-deploy) any time.
+const PASSCODE = "portorford";
+const GATE_KEY = "gfm.admin.unlocked.v1";
+
+function boot() {
+  if (!SUPABASE_URL || SUPABASE_URL.indexOf("__") === 0) {
+    setStatus("not configured", "err");
+    contentEl.innerHTML = "<p style='color:#ff5a5a'>Supabase keys were not injected. Regenerate this page.</p>";
+    return;
+  }
+  loadGear();
+}
+
+function unlock() {
+  document.getElementById("gate").style.display = "none";
+  document.body.classList.remove("locked");
+  boot();
+}
+
+(function initGate() {
+  const gate = document.getElementById("gate");
+  const input = document.getElementById("gate-input");
+  const err = document.getElementById("gate-err");
+  const go = document.getElementById("gate-go");
+  if (localStorage.getItem(GATE_KEY) === PASSCODE) { unlock(); return; }
+  function attempt() {
+    if (input.value === PASSCODE) {
+      try { localStorage.setItem(GATE_KEY, PASSCODE); } catch (e) {}
+      unlock();
+    } else {
+      err.textContent = "Wrong passcode.";
+      input.value = ""; input.focus();
+    }
+  }
+  go.addEventListener("click", attempt);
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") attempt(); });
+  input.focus();
+})();
+</script>
+</body>
+</html>
