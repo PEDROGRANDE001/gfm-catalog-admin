@@ -67,13 +67,14 @@
   .savebar .msg.ok { color: var(--ok); }
   .savebar .msg.err { color: var(--danger); }
   .dirty { color: var(--accent); font-weight: 700; }
-  .colid { width: 150px; }
+  .colid { width: 90px; }
+  .colsearch { display: none; }
   .colnum { width: 90px; }
   .colcat { width: 130px; }
   .coltier { width: 110px; }
   .colchk { width: 60px; }
   .colact { width: 60px; }
-  .colwhy { width: 320px; }
+  .colwhy { width: 280px; }
   .colwhy textarea { min-height: 72px; line-height: 1.4; }
   a { color: var(--accent2); }
   .hint { color: var(--muted); font-size: 12px; margin: 0 0 14px; }
@@ -218,7 +219,7 @@ function renderGear() {
     html += `<div class="catblock"><h2>${cat.label} (${rows.length})</h2>
       <table><thead><tr>
         <th class="colid">id</th><th>name</th><th>note</th>
-        <th class="colnum">price $</th><th>url</th><th>search</th>
+        <th class="colnum">price $</th><th>url</th><th class="colsearch">search</th>
         <th class="colchk">opt</th><th class="colchk">spec</th><th class="coltier">slot</th><th class="colact"></th>
       </tr></thead><tbody>`;
     rows.forEach(r => {
@@ -229,7 +230,7 @@ function renderGear() {
         <td><textarea rows="2" data-i="${i}" data-f="note">${esc(r.note)}</textarea></td>
         <td class="num colnum"><input type="number" step="1" value="${r.price_usd}" data-i="${i}" data-f="price_usd"></td>
         <td><input value="${esc(r.url)}" data-i="${i}" data-f="url"></td>
-        <td><input value="${esc(r.search)}" data-i="${i}" data-f="search"></td>
+        <td class="colsearch"><input value="${esc(r.search)}" data-i="${i}" data-f="search"></td>
         <td class="chk colchk"><input type="checkbox" ${r.optional ? "checked" : ""} data-i="${i}" data-f="optional"></td>
         <td class="chk colchk"><input type="checkbox" ${r.specific ? "checked" : ""} data-i="${i}" data-f="specific"></td>
         <td class="coltier"><input value="${esc(r.slot)}" data-i="${i}" data-f="slot"></td>
@@ -329,7 +330,7 @@ function renderUpgrades() {
   let html = `<div class="catblock"><h2>${esc(name)} (${upgradeRows.length})</h2>
     <table><thead><tr>
       <th class="colid">id</th><th>item</th><th class="colwhy">why</th>
-      <th class="colnum">price $</th><th class="coltier">tier</th><th>url</th><th>search</th><th class="colact"></th>
+      <th class="colnum">price $</th><th class="coltier">tier</th><th>url</th><th class="colsearch">search</th><th class="colact"></th>
     </tr></thead><tbody>`;
   upgradeRows.forEach((r, i) => {
     html += `<tr>
@@ -339,7 +340,7 @@ function renderUpgrades() {
       <td class="num colnum"><input type="number" step="1" value="${r.price_usd}" data-i="${i}" data-f="price_usd"></td>
       <td class="coltier"><input value="${esc(r.tier)}" data-i="${i}" data-f="tier"></td>
       <td><input value="${esc(r.url)}" data-i="${i}" data-f="url"></td>
-      <td><input value="${esc(r.search)}" data-i="${i}" data-f="search"></td>
+      <td class="colsearch"><input value="${esc(r.search)}" data-i="${i}" data-f="search"></td>
       <td class="act colact"><button class="btn danger" data-del="${i}">✕</button></td>
     </tr>`;
   });
