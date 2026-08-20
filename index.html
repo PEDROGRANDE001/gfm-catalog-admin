@@ -76,6 +76,9 @@
   .colact { width: 60px; }
   .colwhy { width: 280px; }
   .colwhy textarea { min-height: 72px; line-height: 1.4; }
+  th.sortable { cursor: pointer; user-select: none; }
+  th.sortable:hover { color: var(--txt); }
+  th.sortable .arrow { color: var(--accent); font-weight: 700; }
   a { color: var(--accent2); }
   .hint { color: var(--muted); font-size: 12px; margin: 0 0 14px; }
   #gate {
@@ -184,6 +187,7 @@ const hintEl = document.getElementById("hint");
 
 let mode = "gear";          // "gear" | "upgrades"
 let upgradeScope = "universal";
+let tierSortDir = 0;        // 0 = none, 1 = asc, -1 = desc
 let gearRows = [];          // working copy
 let upgradeRows = [];       // working copy (current scope only)
 let removedIds = new Set(); // ids deleted in this session, per table flush
@@ -340,7 +344,7 @@ function renderUpgrades() {
   let html = `<div class="catblock"><h2>${esc(name)} (${upgradeRows.length})</h2>
     <table><thead><tr>
       <th class="colid">id</th><th>item</th><th class="colwhy">why</th>
-      <th class="colnum">price $</th><th class="coltier">tier</th><th>url</th><th class="colsearch">search</th><th class="colact"></th>
+      <th class="colnum">price $</th><th class="coltier sortable" data-sorttier="1">tier <span class="arrow">${tierSortDir === 1 ? "▲" : tierSortDir === -1 ? "▼" : "⇅"}</span></th><th>url</th><th class="colsearch">search</th><th class="colact"></th>
     </tr></thead><tbody>`;
   upgradeRows.forEach((r, i) => {
     html += `<tr>
@@ -381,6 +385,34 @@ function wireUpgradeInputs() {
     upgradeRows.push({ id: uid(p), item: "", why: "", price_usd: "", tier: "", url: "", search: "" });
     renderUpgrades(); markDirty();
   }));
+  const tierHead = contentEl.querySelector("[data-sorttier]");
+  if (tierHead) tierHead.addEventListener("click", sortUpgradesByTier);
+}
+
+// Sort the current bike's upgrade rows by the tier column. Click toggles
+// ascending -> descending. Empty tiers always sink to the bottom. Numeric tiers
+// sort numerically; text tiers fall back to alphabetical. Saving persists the
+// new order (rows save top-to-bottom), so this doubles as a reorder tool.
+function sortUpgradesByTier() {
+  tierSortDir = tierSortDir === 1 ? -1 : 1;
+  const rank = (t) => {
+    const s = String(t == null ? "" : t).trim();
+    if (!s) return { empty: true, n: null, s: "" };
+    const n = parseFloat(s);
+    return { empty: false, n: isNaN(n) ? null : n, s: s.toLowerCase() };
+  };
+  upgradeRows.sort((a, b) => {
+    const ra = rank(a.tier), rb = rank(b.tier);
+    if (ra.empty && rb.empty) return 0;
+    if (ra.empty) return 1;   // empties always last
+    if (rb.empty) return -1;
+    let cmp;
+    if (ra.n != null && rb.n != null) cmp = ra.n - rb.n;
+    else cmp = ra.s.localeCompare(rb.s);
+    return cmp * tierSortDir;
+  });
+  renderUpgrades();
+  markDirty();
 }
 
 async function saveUpgrades() {
