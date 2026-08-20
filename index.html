@@ -73,7 +73,10 @@
   .colcat { width: 130px; }
   .coltier { width: 110px; }
   .colchk { width: 60px; }
-  .colact { width: 60px; }
+  .colact { width: 118px; white-space: nowrap; }
+  .btn.move { padding: 5px 7px; color: var(--muted); background: transparent; border-color: transparent; }
+  .btn.move:hover:not([disabled]) { color: var(--accent2); border-color: var(--accent2); }
+  .btn.move[disabled] { opacity: .25; cursor: default; }
   .colwhy { width: 280px; }
   .colwhy textarea { min-height: 72px; line-height: 1.4; }
   th.sortable { cursor: pointer; user-select: none; }
@@ -355,7 +358,11 @@ function renderUpgrades() {
       <td class="coltier"><input value="${esc(r.tier)}" data-i="${i}" data-f="tier"></td>
       <td><input value="${esc(r.url)}" data-i="${i}" data-f="url"></td>
       <td class="colsearch"><input value="${esc(r.search)}" data-i="${i}" data-f="search"></td>
-      <td class="act colact"><button class="btn danger" data-del="${i}">✕</button></td>
+      <td class="act colact">
+        <button class="btn move" data-up="${i}" title="Move up"${i === 0 ? " disabled" : ""}>▲</button>
+        <button class="btn move" data-down="${i}" title="Move down"${i === upgradeRows.length - 1 ? " disabled" : ""}>▼</button>
+        <button class="btn danger" data-del="${i}">✕</button>
+      </td>
     </tr>`;
   });
   html += `</tbody></table><button class="btn add" data-addup="1">+ Add upgrade</button></div>`;
@@ -387,6 +394,17 @@ function wireUpgradeInputs() {
   }));
   const tierHead = contentEl.querySelector("[data-sorttier]");
   if (tierHead) tierHead.addEventListener("click", sortUpgradesByTier);
+  contentEl.querySelectorAll("[data-up]").forEach(b => b.addEventListener("click", () => moveUpgrade(+b.dataset.up, -1)));
+  contentEl.querySelectorAll("[data-down]").forEach(b => b.addEventListener("click", () => moveUpgrade(+b.dataset.down, 1)));
+}
+
+// Swap a row with its neighbour to hand-arrange the exact order. The row order
+// shown here is what saves into sort_order, so this sets the app display order.
+function moveUpgrade(i, dir) {
+  const j = i + dir;
+  if (j < 0 || j >= upgradeRows.length) return;
+  const t = upgradeRows[i]; upgradeRows[i] = upgradeRows[j]; upgradeRows[j] = t;
+  renderUpgrades(); markDirty();
 }
 
 // Sort the current bike's upgrade rows by the tier column. Click toggles
