@@ -73,6 +73,8 @@
   .coltier { width: 110px; }
   .colchk { width: 60px; }
   .colact { width: 60px; }
+  .colwhy { width: 320px; }
+  .colwhy textarea { min-height: 72px; line-height: 1.4; }
   a { color: var(--accent2); }
   .hint { color: var(--muted); font-size: 12px; margin: 0 0 14px; }
   #gate {
@@ -326,14 +328,14 @@ function renderUpgrades() {
   hintEl.textContent = "Upgrades for: " + name + ". Universal upgrades apply to every bike on top of its bike-specific list.";
   let html = `<div class="catblock"><h2>${esc(name)} (${upgradeRows.length})</h2>
     <table><thead><tr>
-      <th class="colid">id</th><th>item</th><th>why</th>
+      <th class="colid">id</th><th>item</th><th class="colwhy">why</th>
       <th class="colnum">price $</th><th class="coltier">tier</th><th>url</th><th>search</th><th class="colact"></th>
     </tr></thead><tbody>`;
   upgradeRows.forEach((r, i) => {
     html += `<tr>
       <td class="colid"><input value="${esc(r.id)}" data-i="${i}" data-f="id"></td>
       <td><input value="${esc(r.item)}" data-i="${i}" data-f="item"></td>
-      <td><textarea rows="2" data-i="${i}" data-f="why">${esc(r.why)}</textarea></td>
+      <td class="colwhy"><textarea rows="4" data-i="${i}" data-f="why">${esc(r.why)}</textarea></td>
       <td class="num colnum"><input type="number" step="1" value="${r.price_usd}" data-i="${i}" data-f="price_usd"></td>
       <td class="coltier"><input value="${esc(r.tier)}" data-i="${i}" data-f="tier"></td>
       <td><input value="${esc(r.url)}" data-i="${i}" data-f="url"></td>
