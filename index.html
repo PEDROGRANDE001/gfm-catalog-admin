@@ -96,6 +96,8 @@
   .grouphdr.collapser { cursor: pointer; user-select: none; }
   .grouphdr.collapser:hover { color: var(--accent); }
   .grouphdr .caret { color: var(--muted); font-size: 20px; width: 22px; display: inline-block; }
+  .catmove { display: inline-flex; gap: 4px; margin-left: 8px; }
+  .catmove .btn.move { padding: 2px 7px; font-size: 12px; }
   .dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; flex: none; }
   .colowner { width: 130px; }
   .colpri { width: 120px; }
@@ -653,7 +655,7 @@ function renderTasks() {
   };
   // Category blocks show LIVE (non-archived) tasks, done ones included so they
   // stay visible for review until archived. Archived tasks collect below.
-  cats.forEach(cat => {
+  cats.forEach((cat, ci) => {
     let live = tasksRows.filter(r => (r.category || "").trim() === cat && !r.archived);
     live = applySort(live);
     const doneCount = live.filter(r => r.status === "done").length;
@@ -661,7 +663,12 @@ function renderTasks() {
     const countTxt = doneCount ? `${live.length} live · ${doneCount} done` : `${live.length} live`;
     const collapsed = taskCollapsed.has(cat);
     html += `<div class="catblock">
-      <h2 class="grouphdr collapser" data-collapse="${esc(cat)}"><span class="caret">${collapsed ? "▸" : "▾"}</span> ${esc(label)} <span style="color:var(--muted);font-weight:700;font-size:12px">(${countTxt})</span></h2>
+      <h2 class="grouphdr collapser" data-collapse="${esc(cat)}"><span class="caret">${collapsed ? "▸" : "▾"}</span> ${esc(label)} <span style="color:var(--muted);font-weight:700;font-size:12px">(${countTxt})</span>
+        <span class="catmove">
+          <button class="btn move" data-catup="${esc(cat)}" title="Move category up"${ci === 0 ? " disabled" : ""}>▲</button>
+          <button class="btn move" data-catdown="${esc(cat)}" title="Move category down"${ci === cats.length - 1 ? " disabled" : ""}>▼</button>
+        </span>
+      </h2>
       ${collapsed ? "" : `<table>${thead}<tbody>${live.map(rowHtml).join("")}</tbody></table>
       <button class="btn add" data-addtask="${esc(cat)}">+ Add task</button>`}</div>`;
   });
@@ -736,6 +743,12 @@ function wireTaskInputs() {
     if (taskCollapsed.has(key)) taskCollapsed.delete(key); else taskCollapsed.add(key);
     renderTasks();
   }));
+  contentEl.querySelectorAll("[data-catup]").forEach(b => b.addEventListener("click", (e) => {
+    e.stopPropagation(); moveCategory(b.dataset.catup, -1);
+  }));
+  contentEl.querySelectorAll("[data-catdown]").forEach(b => b.addEventListener("click", (e) => {
+    e.stopPropagation(); moveCategory(b.dataset.catdown, 1);
+  }));
   contentEl.querySelectorAll("[data-arch]").forEach(b => b.addEventListener("click", () => {
     tasksRows[+b.dataset.arch].archived = true; renderTasks(); markDirty();
   }));
@@ -762,6 +775,23 @@ function moveTask(i, dir) {
   }
   if (j < 0 || j >= tasksRows.length) return;
   const t = tasksRows[i]; tasksRows[i] = tasksRows[j]; tasksRows[j] = t;
+  renderTasks(); markDirty();
+}
+
+// Move a whole category block up or down. Category order is derived from the
+// first-seen order of rows, so we regroup tasksRows by the swapped category order.
+// Rows keep their in-category order; sort_order persists on Save.
+function moveCategory(cat, dir) {
+  cat = (cat || "").trim();
+  const cats = taskCategories();
+  const idx = cats.indexOf(cat);
+  const tgt = idx + dir;
+  if (idx < 0 || tgt < 0 || tgt >= cats.length) return;
+  const t = cats[idx]; cats[idx] = cats[tgt]; cats[tgt] = t;
+  const byCat = {};
+  cats.forEach(c => byCat[c] = []);
+  tasksRows.forEach(r => { const c = (r.category || "").trim(); (byCat[c] ||= []).push(r); });
+  tasksRows = cats.flatMap(c => byCat[c]);
   renderTasks(); markDirty();
 }
 
