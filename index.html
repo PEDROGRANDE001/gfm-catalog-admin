@@ -132,9 +132,9 @@
 <header>
   <h1>Going for Milk - Catalog Admin</h1>
   <div class="tabs">
-    <button class="tab on" id="tab-gear">Gear</button>
+    <button class="tab on" id="tab-tasks">Tasks</button>
+    <button class="tab" id="tab-gear">Gear</button>
     <button class="tab" id="tab-upgrades">Bike Upgrades</button>
-    <button class="tab" id="tab-tasks">Tasks</button>
   </div>
   <span class="status" id="status">connecting…</span>
 </header>
@@ -215,7 +215,7 @@ const scopebarEl = document.getElementById("scopebar");
 const msgEl = document.getElementById("msg");
 const hintEl = document.getElementById("hint");
 
-let mode = "gear";          // "gear" | "upgrades"
+let mode = "tasks";         // "tasks" | "gear" | "upgrades"
 let upgradeScope = "universal";
 let tierSortDir = 0;        // 0 = none, 1 = asc, -1 = desc
 let gearRows = [];          // working copy
@@ -697,7 +697,7 @@ function boot() {
     contentEl.innerHTML = "<p style='color:#ff5a5a'>Supabase keys were not injected. Regenerate this page.</p>";
     return;
   }
-  loadGear();
+  loadTasks();
 }
 
 function unlock() {
