@@ -91,6 +91,11 @@
   .colowner { width: 130px; }
   .colpri { width: 120px; }
   .coldue { width: 160px; }
+  .coldue input[type="date"] { cursor: pointer; }
+  .coldue input[type="date"]::-webkit-calendar-picker-indicator {
+    cursor: pointer; opacity: 1; font-size: 1.15em;
+    filter: invert(48%) sepia(89%) saturate(2000%) hue-rotate(185deg);
+  }
   .colstatus { width: 160px; }
   td select.statussel { font-weight: 800; }
   .colnotes { width: 320px; }
@@ -546,7 +551,7 @@ function renderTasks() {
         <td><input value="${esc(r.title)}" data-i="${i}" data-f="title" placeholder="What needs doing"></td>
         <td class="colnotes"><textarea rows="2" data-i="${i}" data-f="notes">${esc(r.notes)}</textarea></td>
         <td class="colowner"><select data-i="${i}" data-f="owner">${ownerOpts}</select></td>
-        <td class="coldue"><input type="date" value="${esc(r.due_date)}" data-i="${i}" data-f="due_date"></td>
+        <td class="coldue"><input type="date" value="${esc(r.due_date)}" data-i="${i}" data-f="due_date" onclick="try{this.showPicker()}catch(e){}"></td>
         <td class="colcat2"><input value="${esc(r.category)}" data-i="${i}" data-f="category" placeholder="Category"></td>
         <td class="act colact">
           <button class="btn move" data-up="${i}" title="Move up"${si === 0 ? " disabled" : ""}>▲</button>
