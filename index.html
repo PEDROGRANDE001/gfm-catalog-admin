@@ -38,6 +38,8 @@
     padding: 5px 11px; border-radius: 999px; cursor: pointer; font-size: 12px; font-weight: 700;
   }
   .chip.on { background: var(--accent2); color: #04121f; border-color: var(--accent2); }
+  .tasktools { display: flex; gap: 8px; margin-bottom: 16px; }
+  .tasktools .btn.on { background: var(--accent, #2f7dff); color: #fff; border-color: var(--accent, #2f7dff); }
   .catblock { margin-bottom: 30px; }
   .catblock h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 10px; }
   table { width: 100%; border-collapse: collapse; }
@@ -228,6 +230,7 @@ let tierSortDir = 0;        // 0 = none, 1 = asc, -1 = desc
 let gearRows = [];          // working copy
 let upgradeRows = [];       // working copy (current scope only)
 let tasksRows = [];         // working copy (shared task board)
+let taskSortByDue = false;   // false = manual order, true = sort each group by due date
 let removedIds = new Set(); // ids deleted in this session, per table flush
 let loadedIds = new Set();  // ids that existed on load (to detect removals)
 
@@ -524,11 +527,21 @@ function renderTasks() {
   scopebarEl.style.display = "none";
   hintEl.textContent = "Shared board for Peter + Patrick. Group by category, assign an owner, tick the box to complete (done tasks drop to the bottom). Changes save to the cloud on Save.";
   const cats = taskCategories();
-  let html = "";
+  const byDue = (a, b) => {                       // blank due dates sink to the bottom
+    const da = a.due_date || "", db = b.due_date || "";
+    if (!da && !db) return 0;
+    if (!da) return 1;
+    if (!db) return -1;
+    return da < db ? -1 : da > db ? 1 : 0;
+  };
+  let html = `<div class="tasktools">
+    <button class="btn ${taskSortByDue ? "on" : ""}" id="task-sortdue">${taskSortByDue ? "✓ " : ""}Sort by due date</button>
+  </div>`;
   cats.forEach(cat => {
     const rows = tasksRows.filter(r => (r.category || "").trim() === cat);
-    const open = rows.filter(r => r.status !== "done");
-    const done = rows.filter(r => r.status === "done");
+    let open = rows.filter(r => r.status !== "done");
+    let done = rows.filter(r => r.status === "done");
+    if (taskSortByDue) { open = open.slice().sort(byDue); done = done.slice().sort(byDue); }
     const ordered = open.concat(done);
     const label = cat || "Uncategorized";
     const countTxt = done.length ? `${open.length} open · ${done.length} done` : `${open.length} open`;
@@ -536,7 +549,7 @@ function renderTasks() {
       <h2 class="grouphdr">${esc(label)} <span style="color:var(--muted);font-weight:700;font-size:12px">(${countTxt})</span></h2>
       <table><thead><tr>
         <th class="colchk">done</th><th>task</th><th class="colnotes">detail</th>
-        <th class="colowner">assigned to</th><th class="coldue">due</th>
+        <th class="colowner">assigned to</th><th class="coldue">due ${taskSortByDue ? "↑" : ""}</th>
         <th class="colcat2">category</th><th class="colact"></th>
       </tr></thead><tbody>`;
     ordered.forEach(r => {
@@ -554,8 +567,8 @@ function renderTasks() {
         <td class="coldue"><input type="date" value="${esc(r.due_date)}" data-i="${i}" data-f="due_date" onclick="try{this.showPicker()}catch(e){}"></td>
         <td class="colcat2"><input value="${esc(r.category)}" data-i="${i}" data-f="category" placeholder="Category"></td>
         <td class="act colact">
-          <button class="btn move" data-up="${i}" title="Move up"${si === 0 ? " disabled" : ""}>▲</button>
-          <button class="btn move" data-down="${i}" title="Move down"${si === sibs.length - 1 ? " disabled" : ""}>▼</button>
+          <button class="btn move" data-up="${i}" title="Move up"${taskSortByDue || si === 0 ? " disabled" : ""}>▲</button>
+          <button class="btn move" data-down="${i}" title="Move down"${taskSortByDue || si === sibs.length - 1 ? " disabled" : ""}>▼</button>
           <button class="btn danger" data-del="${i}">✕</button>
         </td>
       </tr>`;
@@ -605,6 +618,8 @@ function wireTaskInputs() {
   });
   contentEl.querySelectorAll("[data-up]").forEach(b => b.addEventListener("click", () => moveTask(+b.dataset.up, -1)));
   contentEl.querySelectorAll("[data-down]").forEach(b => b.addEventListener("click", () => moveTask(+b.dataset.down, 1)));
+  const sortBtn = contentEl.querySelector("#task-sortdue");
+  if (sortBtn) sortBtn.addEventListener("click", () => { taskSortByDue = !taskSortByDue; renderTasks(); });
 }
 
 // Swap a task with its nearest sibling (same category + done-state). The global
