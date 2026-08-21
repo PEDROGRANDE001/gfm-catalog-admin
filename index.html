@@ -21,6 +21,7 @@
     display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
   }
   header h1 { font-size: 17px; margin: 0; font-weight: 800; }
+  header .logo { width: 26px; height: 26px; border-radius: 6px; flex: none; }
   header .status { font-size: 13px; color: var(--muted); margin-left: auto; }
   header .status.ok { color: var(--ok); }
   header .status.err { color: var(--danger); }
@@ -130,6 +131,7 @@
   </div>
 </div>
 <header>
+  <img class="logo" src="logo.jpg" alt="" />
   <h1>Trans American Trail - Catalog Admin</h1>
   <div class="tabs">
     <button class="tab on" id="tab-tasks">Tasks</button>
