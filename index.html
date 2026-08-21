@@ -301,6 +301,7 @@ let tasksRows = [];         // working copy (shared task board)
 let taskSortByDue = false;   // false = manual order, true = sort each group by due date
 let taskSortByOwner = false; // sort each group by assigned owner
 let taskCollapsed = new Set(); // category keys whose block is collapsed
+let pendingFocusId = null;   // after a re-render, focus this row's detail textarea
 let removedIds = new Set(); // ids deleted in this session, per table flush
 let loadedIds = new Set();  // ids that existed on load (to detect removals)
 
@@ -688,6 +689,14 @@ function renderTasks() {
   }
   contentEl.innerHTML = html;
   wireTaskInputs();
+  if (pendingFocusId !== null) {
+    const fi = tasksRows.findIndex(r => r.id === pendingFocusId);
+    pendingFocusId = null;
+    if (fi >= 0) {
+      const ta = contentEl.querySelector(`textarea[data-f="notes"][data-i="${fi}"]`);
+      if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+    }
+  }
 }
 
 function wireTaskInputs() {
@@ -707,13 +716,23 @@ function wireTaskInputs() {
       el.addEventListener(evt, () => { tasksRows[+el.dataset.i][f] = el.value; markDirty(); });
     }
   });
-  contentEl.querySelectorAll('textarea[data-f="notes"]').forEach(t => t.addEventListener("keydown", (e) => {
+  contentEl.querySelectorAll('textarea[data-f="notes"]').forEach(t => t.addEventListener("keydown", async (e) => {
     if (e.key === "Enter" && !e.shiftKey) {   // Enter saves the row; Shift+Enter = newline
       e.preventDefault();
       const i = +t.dataset.i;
-      tasksRows[i].notes = t.value;
-      saveOneTask(i);
-      t.blur();
+      const r = tasksRows[i];
+      r.notes = t.value;
+      if (!(r.notes || "").trim()) return;    // empty row: nothing to save, nothing to spawn
+      await saveOneTask(i);
+      // Monday-style: drop a fresh empty task in the same category and jump into it.
+      if (!r.archived) {
+        const fresh = { id: uid("task"), title: "", notes: "", category: r.category || "", status: "none", owner: "", priority: "med", due_date: "", attachments: [], memo: "", archived: false };
+        tasksRows.splice(i + 1, 0, fresh);
+        pendingFocusId = fresh.id;
+        renderTasks(); markDirty();
+      } else {
+        t.blur();
+      }
     }
   }));
   contentEl.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", () => {
@@ -724,14 +743,18 @@ function wireTaskInputs() {
     renderTasks(); markDirty();
   }));
   contentEl.querySelectorAll("[data-addtask]").forEach(b => b.addEventListener("click", () => {
-    tasksRows.push({ id: uid("task"), title: "", notes: "", category: b.dataset.addtask || "", status: "none", owner: "", priority: "med", due_date: "", attachments: [], memo: "", archived: false });
+    const fresh = { id: uid("task"), title: "", notes: "", category: b.dataset.addtask || "", status: "none", owner: "", priority: "med", due_date: "", attachments: [], memo: "", archived: false };
+    tasksRows.push(fresh);
+    pendingFocusId = fresh.id;
     renderTasks(); markDirty();
   }));
   const addCat = contentEl.querySelector("[data-addcat]");
   if (addCat) addCat.addEventListener("click", () => {
     const name = prompt("New category name:");
     if (name === null) return;
-    tasksRows.push({ id: uid("task"), title: "", notes: "", category: name.trim(), status: "none", owner: "", priority: "med", due_date: "", attachments: [], memo: "", archived: false });
+    const fresh = { id: uid("task"), title: "", notes: "", category: name.trim(), status: "none", owner: "", priority: "med", due_date: "", attachments: [], memo: "", archived: false };
+    tasksRows.push(fresh);
+    pendingFocusId = fresh.id;
     renderTasks(); markDirty();
   });
   contentEl.querySelectorAll("[data-up]").forEach(b => b.addEventListener("click", () => moveTask(+b.dataset.up, -1)));
