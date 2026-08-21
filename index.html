@@ -93,6 +93,9 @@
   .hint { color: var(--muted); font-size: 12px; margin: 0 0 14px; }
   /* Tasks board */
   .grouphdr { display: flex; align-items: center; gap: 9px; }
+  .grouphdr.collapser { cursor: pointer; user-select: none; }
+  .grouphdr.collapser:hover { color: var(--accent); }
+  .grouphdr .caret { color: var(--muted); font-size: 12px; width: 14px; display: inline-block; }
   .dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; flex: none; }
   .colowner { width: 130px; }
   .colpri { width: 120px; }
@@ -292,6 +295,7 @@ let upgradeRows = [];       // working copy (current scope only)
 let tasksRows = [];         // working copy (shared task board)
 let taskSortByDue = false;   // false = manual order, true = sort each group by due date
 let taskSortByOwner = false; // sort each group by assigned owner
+let taskCollapsed = new Set(); // category keys whose block is collapsed
 let removedIds = new Set(); // ids deleted in this session, per table flush
 let loadedIds = new Set();  // ids that existed on load (to detect removals)
 
@@ -654,19 +658,21 @@ function renderTasks() {
     const doneCount = live.filter(r => r.status === "done").length;
     const label = cat || "Uncategorized";
     const countTxt = doneCount ? `${live.length} live · ${doneCount} done` : `${live.length} live`;
+    const collapsed = taskCollapsed.has(cat);
     html += `<div class="catblock">
-      <h2 class="grouphdr">${esc(label)} <span style="color:var(--muted);font-weight:700;font-size:12px">(${countTxt})</span></h2>
-      <table>${thead}<tbody>${live.map(rowHtml).join("")}</tbody></table>
-      <button class="btn add" data-addtask="${esc(cat)}">+ Add task</button></div>`;
+      <h2 class="grouphdr collapser" data-collapse="${esc(cat)}"><span class="caret">${collapsed ? "▸" : "▾"}</span> ${esc(label)} <span style="color:var(--muted);font-weight:700;font-size:12px">(${countTxt})</span></h2>
+      ${collapsed ? "" : `<table>${thead}<tbody>${live.map(rowHtml).join("")}</tbody></table>
+      <button class="btn add" data-addtask="${esc(cat)}">+ Add task</button>`}</div>`;
   });
   html += `<button class="btn add" data-addcat="1" style="margin-top:4px">+ Add category</button>`;
   // Single "Archived" section at the very bottom of the whole board.
   let archRows = tasksRows.filter(r => r.archived);
   if (archRows.length) {
     archRows = applySort(archRows);
+    const aCollapsed = taskCollapsed.has("__archived__");
     html += `<div class="catblock donesection">
-      <h2 class="grouphdr">Archived <span style="color:var(--muted);font-weight:700;font-size:12px">(${archRows.length})</span></h2>
-      <table>${thead}<tbody>${archRows.map(rowHtml).join("")}</tbody></table></div>`;
+      <h2 class="grouphdr collapser" data-collapse="__archived__"><span class="caret">${aCollapsed ? "▸" : "▾"}</span> Archived <span style="color:var(--muted);font-weight:700;font-size:12px">(${archRows.length})</span></h2>
+      ${aCollapsed ? "" : `<table>${thead}<tbody>${archRows.map(rowHtml).join("")}</tbody></table>`}</div>`;
   }
   contentEl.innerHTML = html;
   wireTaskInputs();
@@ -714,6 +720,11 @@ function wireTaskInputs() {
   }));
   contentEl.querySelectorAll("[data-sortown]").forEach(h => h.addEventListener("click", () => {
     taskSortByOwner = !taskSortByOwner; taskSortByDue = false; renderTasks();
+  }));
+  contentEl.querySelectorAll("[data-collapse]").forEach(h => h.addEventListener("click", () => {
+    const key = h.dataset.collapse;
+    if (taskCollapsed.has(key)) taskCollapsed.delete(key); else taskCollapsed.add(key);
+    renderTasks();
   }));
   contentEl.querySelectorAll("[data-arch]").forEach(b => b.addEventListener("click", () => {
     tasksRows[+b.dataset.arch].archived = true; renderTasks(); markDirty();
