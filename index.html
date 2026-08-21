@@ -41,6 +41,8 @@
   .tasktools { display: flex; gap: 8px; margin-bottom: 16px; }
   .tasktools .btn.on { background: var(--accent, #2f7dff); color: #fff; border-color: var(--accent, #2f7dff); }
   .catblock { margin-bottom: 30px; }
+  #content { padding-bottom: 32px; }
+  .donesection { margin-top: 34px; border-top: 1px solid var(--line); padding-top: 20px; }
   .catblock h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 10px; }
   table { width: 100%; border-collapse: collapse; }
   th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
@@ -528,8 +530,9 @@ function taskCategories() {
 }
 // Siblings that share a category and done-state (the reorder scope).
 function taskSiblings(r) {
-  const cat = (r.category || "").trim(), done = r.status === "done";
-  return tasksRows.filter(x => (x.category || "").trim() === cat && (x.status === "done") === done);
+  if (r.status === "done") return tasksRows.filter(x => x.status === "done");
+  const cat = (r.category || "").trim();
+  return tasksRows.filter(x => x.status !== "done" && (x.category || "").trim() === cat);
 }
 
 function renderTasks() {
@@ -546,30 +549,20 @@ function renderTasks() {
   let html = `<div class="tasktools">
     <button class="btn ${taskSortByDue ? "on" : ""}" id="task-sortdue">${taskSortByDue ? "✓ " : ""}Sort by due date</button>
   </div>`;
-  cats.forEach(cat => {
-    const rows = tasksRows.filter(r => (r.category || "").trim() === cat);
-    let open = rows.filter(r => r.status !== "done");
-    let done = rows.filter(r => r.status === "done");
-    if (taskSortByDue) { open = open.slice().sort(byDue); done = done.slice().sort(byDue); }
-    const ordered = open.concat(done);
-    const label = cat || "Uncategorized";
-    const countTxt = done.length ? `${open.length} open · ${done.length} done` : `${open.length} open`;
-    html += `<div class="catblock">
-      <h2 class="grouphdr">${esc(label)} <span style="color:var(--muted);font-weight:700;font-size:12px">(${countTxt})</span></h2>
-      <table><thead><tr>
+  const thead = `<thead><tr>
         <th class="colchk">done</th><th>task</th><th class="colnotes">detail</th>
         <th class="colowner">assigned to</th><th class="coldue">due ${taskSortByDue ? "↑" : ""}</th>
         <th class="colfiles">files</th>
         <th class="colcat2">category</th><th class="colact"></th>
-      </tr></thead><tbody>`;
-    ordered.forEach(r => {
-      const i = tasksRows.indexOf(r);
-      const isDone = r.status === "done";
-      const sibs = taskSiblings(r);
-      const si = sibs.indexOf(r);
-      const ownerOpts = TASK_OWNERS.map(o =>
-        `<option value="${esc(o)}" ${o === r.owner ? "selected" : ""}>${o ? esc(o) : "—"}</option>`).join("");
-      html += `<tr class="${isDone ? "taskdone" : ""}">
+      </tr></thead>`;
+  const rowHtml = (r) => {
+    const i = tasksRows.indexOf(r);
+    const isDone = r.status === "done";
+    const sibs = taskSiblings(r);
+    const si = sibs.indexOf(r);
+    const ownerOpts = TASK_OWNERS.map(o =>
+      `<option value="${esc(o)}" ${o === r.owner ? "selected" : ""}>${o ? esc(o) : "—"}</option>`).join("");
+    return `<tr class="${isDone ? "taskdone" : ""}">
         <td class="chk colchk"><input type="checkbox" ${isDone ? "checked" : ""} data-i="${i}" data-f="done"></td>
         <td><input value="${esc(r.title)}" data-i="${i}" data-f="title" placeholder="What needs doing"></td>
         <td class="colnotes"><textarea rows="2" data-i="${i}" data-f="notes">${esc(r.notes)}</textarea></td>
@@ -583,11 +576,28 @@ function renderTasks() {
           <button class="btn danger" data-del="${i}">✕</button>
         </td>
       </tr>`;
-    });
-    html += `</tbody></table>
+  };
+  // Category blocks show OPEN tasks only. Completed tasks collect below.
+  cats.forEach(cat => {
+    let open = tasksRows.filter(r => (r.category || "").trim() === cat && r.status !== "done");
+    if (taskSortByDue) open = open.slice().sort(byDue);
+    const doneCount = tasksRows.filter(r => (r.category || "").trim() === cat && r.status === "done").length;
+    const label = cat || "Uncategorized";
+    const countTxt = doneCount ? `${open.length} open · ${doneCount} done` : `${open.length} open`;
+    html += `<div class="catblock">
+      <h2 class="grouphdr">${esc(label)} <span style="color:var(--muted);font-weight:700;font-size:12px">(${countTxt})</span></h2>
+      <table>${thead}<tbody>${open.map(rowHtml).join("")}</tbody></table>
       <button class="btn add" data-addtask="${esc(cat)}">+ Add task</button></div>`;
   });
   html += `<button class="btn add" data-addcat="1" style="margin-top:4px">+ Add category</button>`;
+  // Single "Done" section at the very bottom of the whole board.
+  let doneRows = tasksRows.filter(r => r.status === "done");
+  if (doneRows.length) {
+    if (taskSortByDue) doneRows = doneRows.slice().sort(byDue);
+    html += `<div class="catblock donesection">
+      <h2 class="grouphdr">Done <span style="color:var(--muted);font-weight:700;font-size:12px">(${doneRows.length})</span></h2>
+      <table>${thead}<tbody>${doneRows.map(rowHtml).join("")}</tbody></table></div>`;
+  }
   contentEl.innerHTML = html;
   wireTaskInputs();
 }
@@ -646,7 +656,10 @@ function moveTask(i, dir) {
   let j = i + dir;
   while (j >= 0 && j < tasksRows.length) {
     const x = tasksRows[j];
-    if ((x.category || "").trim() === cat && (x.status === "done") === done) break;
+    const match = done
+      ? x.status === "done"                                          // done = one global group
+      : (x.status !== "done" && (x.category || "").trim() === cat);  // open = grouped by category
+    if (match) break;
     j += dir;
   }
   if (j < 0 || j >= tasksRows.length) return;
