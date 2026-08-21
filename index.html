@@ -78,10 +78,12 @@
   .colcat { width: 130px; }
   .coltier { width: 110px; }
   .colchk { width: 60px; }
-  .colact { width: 118px; white-space: nowrap; }
+  .colact { width: 190px; white-space: nowrap; }
   .btn.move { padding: 5px 7px; color: var(--muted); background: transparent; border-color: transparent; }
   .btn.move:hover:not([disabled]) { color: var(--accent2); border-color: var(--accent2); }
   .btn.move[disabled] { opacity: .25; cursor: default; }
+  .btn.arch { padding: 4px 9px; font-size: 12px; font-weight: 700; color: var(--muted); }
+  .btn.arch:hover { color: var(--txt); border-color: var(--accent); }
   .colwhy { width: 280px; }
   .colwhy textarea { min-height: 72px; line-height: 1.4; }
   th.sortable { cursor: pointer; user-select: none; }
@@ -562,7 +564,7 @@ async function loadTasks() {
     status: TASK_STATUS.includes(r.status) ? r.status : (r.status === "done" ? "done" : "on_track"), owner: r.owner || "",
     priority: r.priority || "med", due_date: r.due_date || "",
     attachments: Array.isArray(r.attachments) ? r.attachments : [],
-    memo: r.memo || "",
+    memo: r.memo || "", archived: !!r.archived,
   }));
   loadedIds = new Set(tasksRows.map(r => r.id));
   removedIds = new Set();
@@ -578,11 +580,11 @@ function taskCategories() {
   if (seen.length === 0) seen.push("");
   return seen;
 }
-// Siblings that share a category and done-state (the reorder scope).
+// Siblings that share a category and archive-state (the reorder scope).
 function taskSiblings(r) {
-  if (r.status === "done") return tasksRows.filter(x => x.status === "done");
+  if (r.archived) return tasksRows.filter(x => x.archived);
   const cat = (r.category || "").trim();
-  return tasksRows.filter(x => x.status !== "done" && (x.category || "").trim() === cat);
+  return tasksRows.filter(x => !x.archived && (x.category || "").trim() === cat);
 }
 
 function renderTasks() {
@@ -637,30 +639,34 @@ function renderTasks() {
         <td class="act colact">
           <button class="btn move" data-up="${i}" title="Move up"${sortActive || si === 0 ? " disabled" : ""}>▲</button>
           <button class="btn move" data-down="${i}" title="Move down"${sortActive || si === sibs.length - 1 ? " disabled" : ""}>▼</button>
+          ${r.archived
+            ? `<button class="btn" data-unarch="${i}" title="Restore to board">↩</button>`
+            : `<button class="btn arch" data-arch="${i}" title="Archive to bottom">Archive</button>`}
           <button class="btn danger" data-del="${i}">✕</button>
         </td>
       </tr>`;
   };
-  // Category blocks show OPEN tasks only. Completed tasks collect below.
+  // Category blocks show LIVE (non-archived) tasks, done ones included so they
+  // stay visible for review until archived. Archived tasks collect below.
   cats.forEach(cat => {
-    let open = tasksRows.filter(r => (r.category || "").trim() === cat && r.status !== "done");
-    open = applySort(open);
-    const doneCount = tasksRows.filter(r => (r.category || "").trim() === cat && r.status === "done").length;
+    let live = tasksRows.filter(r => (r.category || "").trim() === cat && !r.archived);
+    live = applySort(live);
+    const doneCount = live.filter(r => r.status === "done").length;
     const label = cat || "Uncategorized";
-    const countTxt = doneCount ? `${open.length} open · ${doneCount} done` : `${open.length} open`;
+    const countTxt = doneCount ? `${live.length} live · ${doneCount} done` : `${live.length} live`;
     html += `<div class="catblock">
       <h2 class="grouphdr">${esc(label)} <span style="color:var(--muted);font-weight:700;font-size:12px">(${countTxt})</span></h2>
-      <table>${thead}<tbody>${open.map(rowHtml).join("")}</tbody></table>
+      <table>${thead}<tbody>${live.map(rowHtml).join("")}</tbody></table>
       <button class="btn add" data-addtask="${esc(cat)}">+ Add task</button></div>`;
   });
   html += `<button class="btn add" data-addcat="1" style="margin-top:4px">+ Add category</button>`;
-  // Single "Done" section at the very bottom of the whole board.
-  let doneRows = tasksRows.filter(r => r.status === "done");
-  if (doneRows.length) {
-    doneRows = applySort(doneRows);
+  // Single "Archived" section at the very bottom of the whole board.
+  let archRows = tasksRows.filter(r => r.archived);
+  if (archRows.length) {
+    archRows = applySort(archRows);
     html += `<div class="catblock donesection">
-      <h2 class="grouphdr">Done <span style="color:var(--muted);font-weight:700;font-size:12px">(${doneRows.length})</span></h2>
-      <table>${thead}<tbody>${doneRows.map(rowHtml).join("")}</tbody></table></div>`;
+      <h2 class="grouphdr">Archived <span style="color:var(--muted);font-weight:700;font-size:12px">(${archRows.length})</span></h2>
+      <table>${thead}<tbody>${archRows.map(rowHtml).join("")}</tbody></table></div>`;
   }
   contentEl.innerHTML = html;
   wireTaskInputs();
@@ -673,7 +679,7 @@ function wireTaskInputs() {
     if (f === "status") {
       el.addEventListener("change", () => {
         tasksRows[+el.dataset.i].status = el.value;
-        renderTasks(); markDirty();          // done tasks sink to the bottom
+        renderTasks(); markDirty();          // done stays put; Archive is what drops it
       });
     } else if (f === "category") {
       el.addEventListener("input", () => { tasksRows[+el.dataset.i].category = el.value; markDirty(); });
@@ -691,14 +697,14 @@ function wireTaskInputs() {
     renderTasks(); markDirty();
   }));
   contentEl.querySelectorAll("[data-addtask]").forEach(b => b.addEventListener("click", () => {
-    tasksRows.push({ id: uid("task"), title: "", notes: "", category: b.dataset.addtask || "", status: "on_track", owner: "", priority: "med", due_date: "", attachments: [], memo: "" });
+    tasksRows.push({ id: uid("task"), title: "", notes: "", category: b.dataset.addtask || "", status: "on_track", owner: "", priority: "med", due_date: "", attachments: [], memo: "", archived: false });
     renderTasks(); markDirty();
   }));
   const addCat = contentEl.querySelector("[data-addcat]");
   if (addCat) addCat.addEventListener("click", () => {
     const name = prompt("New category name:");
     if (name === null) return;
-    tasksRows.push({ id: uid("task"), title: "", notes: "", category: name.trim(), status: "on_track", owner: "", priority: "med", due_date: "", attachments: [], memo: "" });
+    tasksRows.push({ id: uid("task"), title: "", notes: "", category: name.trim(), status: "on_track", owner: "", priority: "med", due_date: "", attachments: [], memo: "", archived: false });
     renderTasks(); markDirty();
   });
   contentEl.querySelectorAll("[data-up]").forEach(b => b.addEventListener("click", () => moveTask(+b.dataset.up, -1)));
@@ -709,21 +715,27 @@ function wireTaskInputs() {
   contentEl.querySelectorAll("[data-sortown]").forEach(h => h.addEventListener("click", () => {
     taskSortByOwner = !taskSortByOwner; taskSortByDue = false; renderTasks();
   }));
+  contentEl.querySelectorAll("[data-arch]").forEach(b => b.addEventListener("click", () => {
+    tasksRows[+b.dataset.arch].archived = true; renderTasks(); markDirty();
+  }));
+  contentEl.querySelectorAll("[data-unarch]").forEach(b => b.addEventListener("click", () => {
+    tasksRows[+b.dataset.unarch].archived = false; renderTasks(); markDirty();
+  }));
   contentEl.querySelectorAll("[data-note]").forEach(b =>
     b.addEventListener("click", () => openNoteModal(+b.dataset.note)));
 }
 
-// Swap a task with its nearest sibling (same category + done-state). The global
+// Swap a task with its nearest sibling (same category + archive-state). The global
 // row order is what saves into sort_order, so this hand-arranges the board.
 function moveTask(i, dir) {
   const r = tasksRows[i];
-  const cat = (r.category || "").trim(), done = r.status === "done";
+  const cat = (r.category || "").trim(), arch = !!r.archived;
   let j = i + dir;
   while (j >= 0 && j < tasksRows.length) {
     const x = tasksRows[j];
-    const match = done
-      ? x.status === "done"                                          // done = one global group
-      : (x.status !== "done" && (x.category || "").trim() === cat);  // open = grouped by category
+    const match = arch
+      ? !!x.archived                                              // archived = one global group
+      : (!x.archived && (x.category || "").trim() === cat);       // live = grouped by category
     if (match) break;
     j += dir;
   }
@@ -827,7 +839,7 @@ async function saveTasks() {
     status: TASK_STATUS.includes(r.status) ? r.status : "on_track", owner: r.owner || null,
     priority: r.priority || "med", due_date: r.due_date || null, sort_order: i,
     attachments: Array.isArray(r.attachments) ? r.attachments : [],
-    memo: (r.memo || "").trim() || null,
+    memo: (r.memo || "").trim() || null, archived: !!r.archived,
   }));
   const { error } = await sb.from("tasks").upsert(payload);
   if (error) { setMsg("Save failed: " + error.message, "err"); return; }
@@ -909,7 +921,7 @@ document.getElementById("note-save").addEventListener("click", async () => {
     status: TASK_STATUS.includes(r.status) ? r.status : "on_track", owner: r.owner || null,
     priority: r.priority || "med", due_date: r.due_date || null,
     attachments: Array.isArray(r.attachments) ? r.attachments : [],
-    memo: (r.memo || "").trim() || null,
+    memo: (r.memo || "").trim() || null, archived: !!r.archived,
   });
   btn.disabled = false;
   if (error) { nm.textContent = "Save failed: " + error.message; return; }
