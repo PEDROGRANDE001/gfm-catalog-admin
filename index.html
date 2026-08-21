@@ -84,6 +84,19 @@
   th.sortable .arrow { color: var(--accent); font-weight: 700; }
   a { color: var(--accent2); }
   .hint { color: var(--muted); font-size: 12px; margin: 0 0 14px; }
+  /* Tasks board */
+  .grouphdr { display: flex; align-items: center; gap: 9px; }
+  .dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; flex: none; }
+  .colowner { width: 130px; }
+  .colpri { width: 120px; }
+  .coldue { width: 160px; }
+  .colstatus { width: 160px; }
+  td select.statussel { font-weight: 800; }
+  .colnotes { width: 320px; }
+  .colnotes textarea { min-height: 46px; line-height: 1.4; }
+  .colcat2 { width: 150px; }
+  tr.taskdone td input, tr.taskdone td textarea, tr.taskdone td select { opacity: .5; }
+  tr.taskdone td input[data-f="title"] { text-decoration: line-through; }
   #gate {
     position: fixed; inset: 0; z-index: 100; background: var(--bg);
     display: flex; align-items: center; justify-content: center; padding: 24px;
@@ -121,6 +134,7 @@
   <div class="tabs">
     <button class="tab on" id="tab-gear">Gear</button>
     <button class="tab" id="tab-upgrades">Bike Upgrades</button>
+    <button class="tab" id="tab-tasks">Tasks</button>
   </div>
   <span class="status" id="status">connecting…</span>
 </header>
@@ -181,6 +195,19 @@ const BIKES = [
   { id: "dr350", name: "Suzuki DR350" },
 ];
 
+const TASK_STATUSES = [
+  { id: "todo",    label: "To Do",         color: "#3aa0ff" },
+  { id: "working", label: "Working on it", color: "#f5a623" },
+  { id: "stuck",   label: "Stuck",         color: "#ff5a5a" },
+  { id: "done",    label: "Done",          color: "#37c871" },
+];
+const TASK_OWNERS = ["", "Peter", "Patrick"];
+const TASK_PRIORITIES = [
+  { id: "low",  label: "Low" },
+  { id: "med",  label: "Medium" },
+  { id: "high", label: "High" },
+];
+
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const statusEl = document.getElementById("status");
 const contentEl = document.getElementById("content");
@@ -193,6 +220,7 @@ let upgradeScope = "universal";
 let tierSortDir = 0;        // 0 = none, 1 = asc, -1 = desc
 let gearRows = [];          // working copy
 let upgradeRows = [];       // working copy (current scope only)
+let tasksRows = [];         // working copy (shared task board)
 let removedIds = new Set(); // ids deleted in this session, per table flush
 let loadedIds = new Set();  // ids that existed on load (to detect removals)
 
@@ -454,6 +482,162 @@ async function saveUpgrades() {
   await loadUpgrades();
 }
 
+// ---------------- TASKS ----------------
+async function loadTasks() {
+  setMsg("");
+  scopebarEl.style.display = "none";
+  const { data, error } = await sb.from("tasks").select("*").order("sort_order", { ascending: true });
+  if (error) { setStatus("read error", "err"); setMsg(error.message, "err"); return; }
+  tasksRows = (data || []).map(r => ({
+    id: r.id, title: r.title || "", notes: r.notes || "", category: r.category || "",
+    status: r.status === "done" ? "done" : "todo", owner: r.owner || "",
+    priority: r.priority || "med", due_date: r.due_date || "",
+  }));
+  loadedIds = new Set(tasksRows.map(r => r.id));
+  removedIds = new Set();
+  const open = tasksRows.filter(r => r.status !== "done").length;
+  setStatus("connected · " + open + " open / " + tasksRows.length + " total", "ok");
+  renderTasks();
+}
+
+// Distinct categories in first-seen order (blank grouped as Uncategorized).
+function taskCategories() {
+  const seen = [];
+  tasksRows.forEach(r => { const c = (r.category || "").trim(); if (!seen.includes(c)) seen.push(c); });
+  if (seen.length === 0) seen.push("");
+  return seen;
+}
+// Siblings that share a category and done-state (the reorder scope).
+function taskSiblings(r) {
+  const cat = (r.category || "").trim(), done = r.status === "done";
+  return tasksRows.filter(x => (x.category || "").trim() === cat && (x.status === "done") === done);
+}
+
+function renderTasks() {
+  scopebarEl.style.display = "none";
+  hintEl.textContent = "Shared board for Peter + Patrick. Group by category, assign an owner, tick the box to complete (done tasks drop to the bottom). Changes save to the cloud on Save.";
+  const cats = taskCategories();
+  let html = "";
+  cats.forEach(cat => {
+    const rows = tasksRows.filter(r => (r.category || "").trim() === cat);
+    const open = rows.filter(r => r.status !== "done");
+    const done = rows.filter(r => r.status === "done");
+    const ordered = open.concat(done);
+    const label = cat || "Uncategorized";
+    const countTxt = done.length ? `${open.length} open · ${done.length} done` : `${open.length} open`;
+    html += `<div class="catblock">
+      <h2 class="grouphdr">${esc(label)} <span style="color:var(--muted);font-weight:700;font-size:12px">(${countTxt})</span></h2>
+      <table><thead><tr>
+        <th class="colchk">done</th><th>task</th><th class="colnotes">detail</th>
+        <th class="colowner">assigned to</th><th class="coldue">due</th>
+        <th class="colcat2">category</th><th class="colact"></th>
+      </tr></thead><tbody>`;
+    ordered.forEach(r => {
+      const i = tasksRows.indexOf(r);
+      const isDone = r.status === "done";
+      const sibs = taskSiblings(r);
+      const si = sibs.indexOf(r);
+      const ownerOpts = TASK_OWNERS.map(o =>
+        `<option value="${esc(o)}" ${o === r.owner ? "selected" : ""}>${o ? esc(o) : "—"}</option>`).join("");
+      html += `<tr class="${isDone ? "taskdone" : ""}">
+        <td class="chk colchk"><input type="checkbox" ${isDone ? "checked" : ""} data-i="${i}" data-f="done"></td>
+        <td><input value="${esc(r.title)}" data-i="${i}" data-f="title" placeholder="What needs doing"></td>
+        <td class="colnotes"><textarea rows="2" data-i="${i}" data-f="notes">${esc(r.notes)}</textarea></td>
+        <td class="colowner"><select data-i="${i}" data-f="owner">${ownerOpts}</select></td>
+        <td class="coldue"><input type="date" value="${esc(r.due_date)}" data-i="${i}" data-f="due_date"></td>
+        <td class="colcat2"><input value="${esc(r.category)}" data-i="${i}" data-f="category" placeholder="Category"></td>
+        <td class="act colact">
+          <button class="btn move" data-up="${i}" title="Move up"${si === 0 ? " disabled" : ""}>▲</button>
+          <button class="btn move" data-down="${i}" title="Move down"${si === sibs.length - 1 ? " disabled" : ""}>▼</button>
+          <button class="btn danger" data-del="${i}">✕</button>
+        </td>
+      </tr>`;
+    });
+    html += `</tbody></table>
+      <button class="btn add" data-addtask="${esc(cat)}">+ Add task</button></div>`;
+  });
+  html += `<button class="btn add" data-addcat="1" style="margin-top:4px">+ Add category</button>`;
+  contentEl.innerHTML = html;
+  wireTaskInputs();
+}
+
+function wireTaskInputs() {
+  contentEl.querySelectorAll("input,textarea,select").forEach(el => {
+    const f = el.dataset.f;
+    if (!f) return;
+    if (f === "done") {
+      el.addEventListener("change", () => {
+        tasksRows[+el.dataset.i].status = el.checked ? "done" : "todo";
+        renderTasks(); markDirty();          // completed tasks sink to the bottom
+      });
+    } else if (f === "category") {
+      el.addEventListener("input", () => { tasksRows[+el.dataset.i].category = el.value; markDirty(); });
+      el.addEventListener("change", () => renderTasks());   // regroup on blur
+    } else {
+      const evt = el.tagName === "SELECT" ? "change" : "input";
+      el.addEventListener(evt, () => { tasksRows[+el.dataset.i][f] = el.value; markDirty(); });
+    }
+  });
+  contentEl.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", () => {
+    const i = +b.dataset.del, row = tasksRows[i];
+    if (!confirm("Delete task \"" + (row.title || row.id) + "\"?")) return;
+    if (loadedIds.has(row.id)) removedIds.add(row.id);
+    tasksRows.splice(i, 1);
+    renderTasks(); markDirty();
+  }));
+  contentEl.querySelectorAll("[data-addtask]").forEach(b => b.addEventListener("click", () => {
+    tasksRows.push({ id: uid("task"), title: "", notes: "", category: b.dataset.addtask || "", status: "todo", owner: "", priority: "med", due_date: "" });
+    renderTasks(); markDirty();
+  }));
+  const addCat = contentEl.querySelector("[data-addcat]");
+  if (addCat) addCat.addEventListener("click", () => {
+    const name = prompt("New category name:");
+    if (name === null) return;
+    tasksRows.push({ id: uid("task"), title: "", notes: "", category: name.trim(), status: "todo", owner: "", priority: "med", due_date: "" });
+    renderTasks(); markDirty();
+  });
+  contentEl.querySelectorAll("[data-up]").forEach(b => b.addEventListener("click", () => moveTask(+b.dataset.up, -1)));
+  contentEl.querySelectorAll("[data-down]").forEach(b => b.addEventListener("click", () => moveTask(+b.dataset.down, 1)));
+}
+
+// Swap a task with its nearest sibling (same category + done-state). The global
+// row order is what saves into sort_order, so this hand-arranges the board.
+function moveTask(i, dir) {
+  const r = tasksRows[i];
+  const cat = (r.category || "").trim(), done = r.status === "done";
+  let j = i + dir;
+  while (j >= 0 && j < tasksRows.length) {
+    const x = tasksRows[j];
+    if ((x.category || "").trim() === cat && (x.status === "done") === done) break;
+    j += dir;
+  }
+  if (j < 0 || j >= tasksRows.length) return;
+  const t = tasksRows[i]; tasksRows[i] = tasksRows[j]; tasksRows[j] = t;
+  renderTasks(); markDirty();
+}
+
+async function saveTasks() {
+  const ids = tasksRows.map(r => r.id.trim());
+  if (ids.some(x => !x)) { setMsg("Every task needs an id.", "err"); return; }
+  if (new Set(ids).size !== ids.length) { setMsg("Duplicate ids. Ids must be unique.", "err"); return; }
+  if (tasksRows.some(r => !r.title.trim())) { setMsg("Every task needs a title.", "err"); return; }
+  setMsg("Saving…");
+  for (const id of removedIds) {
+    const { error } = await sb.from("tasks").delete().eq("id", id);
+    if (error) { setMsg("Delete failed: " + error.message, "err"); return; }
+  }
+  const payload = tasksRows.map((r, i) => ({
+    id: r.id.trim(), title: r.title.trim(), notes: r.notes || null,
+    category: (r.category || "").trim() || null,
+    status: r.status === "done" ? "done" : "todo", owner: r.owner || null,
+    priority: r.priority || "med", due_date: r.due_date || null, sort_order: i,
+  }));
+  const { error } = await sb.from("tasks").upsert(payload);
+  if (error) { setMsg("Save failed: " + error.message, "err"); return; }
+  setMsg("Saved " + payload.length + " tasks.", "ok");
+  await loadTasks();
+}
+
 // ---------------- shared ----------------
 let isDirty = false;
 function markDirty() { isDirty = true; setMsg("Unsaved changes.", ""); msgEl.classList.add("dirty"); }
@@ -463,29 +647,40 @@ function esc(s) {
     .replace(/"/g, "&quot;");
 }
 
+function selectTab(id) {
+  ["tab-gear", "tab-upgrades", "tab-tasks"].forEach(t =>
+    document.getElementById(t).classList.toggle("on", t === id));
+}
 document.getElementById("tab-gear").addEventListener("click", async () => {
   if (isDirty && !confirm("Discard unsaved changes?")) return;
-  mode = "gear"; isDirty = false;
-  document.getElementById("tab-gear").classList.add("on");
-  document.getElementById("tab-upgrades").classList.remove("on");
+  mode = "gear"; isDirty = false; selectTab("tab-gear");
   await loadGear();
 });
 document.getElementById("tab-upgrades").addEventListener("click", async () => {
   if (isDirty && !confirm("Discard unsaved changes?")) return;
-  mode = "upgrades"; isDirty = false;
-  document.getElementById("tab-upgrades").classList.add("on");
-  document.getElementById("tab-gear").classList.remove("on");
+  mode = "upgrades"; isDirty = false; selectTab("tab-upgrades");
   await loadUpgrades();
 });
+document.getElementById("tab-tasks").addEventListener("click", async () => {
+  if (isDirty && !confirm("Discard unsaved changes?")) return;
+  mode = "tasks"; isDirty = false; selectTab("tab-tasks");
+  await loadTasks();
+});
+function loadCurrent() {
+  return mode === "gear" ? loadGear() : mode === "upgrades" ? loadUpgrades() : loadTasks();
+}
+function saveCurrent() {
+  return mode === "gear" ? saveGear() : mode === "upgrades" ? saveUpgrades() : saveTasks();
+}
 document.getElementById("save").addEventListener("click", async () => {
   document.getElementById("save").disabled = true;
-  try { mode === "gear" ? await saveGear() : await saveUpgrades(); isDirty = false; }
+  try { await saveCurrent(); isDirty = false; }
   finally { document.getElementById("save").disabled = false; }
 });
 document.getElementById("reload").addEventListener("click", async () => {
   if (isDirty && !confirm("Discard unsaved changes and reload?")) return;
   isDirty = false;
-  mode === "gear" ? await loadGear() : await loadUpgrades();
+  await loadCurrent();
 });
 
 // ---------------- passcode gate ----------------
