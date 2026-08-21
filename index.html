@@ -113,6 +113,7 @@
   td select.statussel { -webkit-appearance: none; appearance: none; border-radius: 6px; text-align: center; }
   td select.status-on_track { color: #eafff2; background: #2ecc71; border-color: #29b866; }
   td select.status-stuck { color: #fff0ef; background: #e74c3c; border-color: #d13b2c; }
+  td select.status-ready { color: #2b1a00; background: #f5a623; border-color: #dc9313; }
   td select.status-done { color: #eaf4ff; background: #3b9dff; border-color: #2f88e6; }
   .colnotes { width: 640px; }
   .colnotes textarea { min-height: 46px; line-height: 1.4; }
@@ -225,8 +226,8 @@ const TASK_STATUSES = [
   { id: "done",    label: "Done",          color: "#37c871" },
 ];
 const TASK_OWNERS = ["", "Peter", "Patrick", "Austin", "Shameen"];
-const TASK_STATUS = ["on_track", "stuck", "done"];
-const TASK_STATUS_LABEL = { on_track: "On track", stuck: "Stuck", done: "Done" };
+const TASK_STATUS = ["on_track", "stuck", "ready", "done"];
+const TASK_STATUS_LABEL = { on_track: "On track", stuck: "Stuck", ready: "Ready for review", done: "Done" };
 const TASK_PRIORITIES = [
   { id: "low",  label: "Low" },
   { id: "med",  label: "Medium" },
