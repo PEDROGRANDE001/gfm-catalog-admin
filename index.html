@@ -731,6 +731,12 @@ async function saveTasks() {
 // ---------------- shared ----------------
 let isDirty = false;
 function markDirty() { isDirty = true; setMsg("Unsaved changes.", ""); msgEl.classList.add("dirty"); }
+// A browser refresh/close bypasses the in-app confirms, so guard it too. This is
+// what stops "I added tasks and they disappeared" when the page reloads unsaved.
+window.addEventListener("beforeunload", (e) => {
+  if (!isDirty) return;
+  e.preventDefault(); e.returnValue = "";
+});
 function esc(s) {
   return String(s == null ? "" : s)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
