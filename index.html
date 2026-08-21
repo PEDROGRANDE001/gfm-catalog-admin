@@ -116,6 +116,7 @@
   .colstatus { width: 190px; }
   td select.statussel { font-weight: 800; }
   td select.statussel { -webkit-appearance: none; appearance: none; border-radius: 6px; text-align: center; }
+  td select.status-none { color: #cfd4db; background: #3a3f47; border-color: #4a505a; }
   td select.status-not_started { color: #f3f4f6; background: #6b7280; border-color: #565d69; }
   td select.status-on_track { color: #eafff2; background: #2ecc71; border-color: #29b866; }
   td select.status-stuck { color: #fff0ef; background: #e74c3c; border-color: #d13b2c; }
@@ -272,8 +273,8 @@ const TASK_STATUSES = [
   { id: "done",    label: "Done",          color: "#37c871" },
 ];
 const TASK_OWNERS = ["", "Peter", "Patrick", "Austin", "Shameen"];
-const TASK_STATUS = ["not_started", "on_track", "stuck", "ready", "done"];
-const TASK_STATUS_LABEL = { not_started: "Not started", on_track: "On track", stuck: "Stuck", ready: "Ready for review", done: "Done" };
+const TASK_STATUS = ["none", "not_started", "on_track", "stuck", "ready", "done"];
+const TASK_STATUS_LABEL = { none: "", not_started: "Not started", on_track: "On track", stuck: "Stuck", ready: "Ready for review", done: "Done" };
 const TASK_PRIORITIES = [
   { id: "low",  label: "Low" },
   { id: "med",  label: "Medium" },
@@ -565,7 +566,7 @@ async function loadTasks() {
   if (error) { setStatus("read error", "err"); setMsg(error.message, "err"); return; }
   tasksRows = (data || []).map(r => ({
     id: r.id, title: r.title || "", notes: r.notes || "", category: r.category || "",
-    status: TASK_STATUS.includes(r.status) ? r.status : (r.status === "done" ? "done" : "on_track"), owner: r.owner || "",
+    status: TASK_STATUS.includes(r.status) ? r.status : "none", owner: r.owner || "",
     priority: r.priority || "med", due_date: r.due_date || "",
     attachments: Array.isArray(r.attachments) ? r.attachments : [],
     memo: r.memo || "", archived: !!r.archived,
@@ -631,7 +632,7 @@ function renderTasks() {
     const si = sibs.indexOf(r);
     const ownerOpts = TASK_OWNERS.map(o =>
       `<option value="${esc(o)}" ${o === r.owner ? "selected" : ""}>${o ? esc(o) : "—"}</option>`).join("");
-    const st = TASK_STATUS.includes(r.status) ? r.status : "on_track";
+    const st = TASK_STATUS.includes(r.status) ? r.status : "none";
     const statusOpts = TASK_STATUS.map(s =>
       `<option value="${s}" ${s === st ? "selected" : ""}>${TASK_STATUS_LABEL[s]}</option>`).join("");
     return `<tr class="${isDone ? "taskdone" : ""}">
@@ -703,14 +704,14 @@ function wireTaskInputs() {
     renderTasks(); markDirty();
   }));
   contentEl.querySelectorAll("[data-addtask]").forEach(b => b.addEventListener("click", () => {
-    tasksRows.push({ id: uid("task"), title: "", notes: "", category: b.dataset.addtask || "", status: "on_track", owner: "", priority: "med", due_date: "", attachments: [], memo: "", archived: false });
+    tasksRows.push({ id: uid("task"), title: "", notes: "", category: b.dataset.addtask || "", status: "none", owner: "", priority: "med", due_date: "", attachments: [], memo: "", archived: false });
     renderTasks(); markDirty();
   }));
   const addCat = contentEl.querySelector("[data-addcat]");
   if (addCat) addCat.addEventListener("click", () => {
     const name = prompt("New category name:");
     if (name === null) return;
-    tasksRows.push({ id: uid("task"), title: "", notes: "", category: name.trim(), status: "on_track", owner: "", priority: "med", due_date: "", attachments: [], memo: "", archived: false });
+    tasksRows.push({ id: uid("task"), title: "", notes: "", category: name.trim(), status: "none", owner: "", priority: "med", due_date: "", attachments: [], memo: "", archived: false });
     renderTasks(); markDirty();
   });
   contentEl.querySelectorAll("[data-up]").forEach(b => b.addEventListener("click", () => moveTask(+b.dataset.up, -1)));
@@ -847,7 +848,7 @@ async function saveTasks() {
   const payload = tasksRows.map((r, i) => ({
     id: r.id.trim(), title: (r.notes || "").trim(), notes: r.notes || null,
     category: (r.category || "").trim() || null,
-    status: TASK_STATUS.includes(r.status) ? r.status : "on_track", owner: r.owner || null,
+    status: TASK_STATUS.includes(r.status) ? r.status : "none", owner: r.owner || null,
     priority: r.priority || "med", due_date: r.due_date || null, sort_order: i,
     attachments: Array.isArray(r.attachments) ? r.attachments : [],
     memo: (r.memo || "").trim() || null, archived: !!r.archived,
@@ -929,7 +930,7 @@ document.getElementById("note-save").addEventListener("click", async () => {
   const { error } = await sb.from("tasks").upsert({
     id: r.id.trim(), title: (r.notes || "").trim(), notes: r.notes || null,
     category: (r.category || "").trim() || null,
-    status: TASK_STATUS.includes(r.status) ? r.status : "on_track", owner: r.owner || null,
+    status: TASK_STATUS.includes(r.status) ? r.status : "none", owner: r.owner || null,
     priority: r.priority || "med", due_date: r.due_date || null,
     attachments: Array.isArray(r.attachments) ? r.attachments : [],
     memo: (r.memo || "").trim() || null, archived: !!r.archived,
