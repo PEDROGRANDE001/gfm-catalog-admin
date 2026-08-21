@@ -121,6 +121,28 @@
   .colcat2 { width: 150px; }
   tr.taskdone td input, tr.taskdone td textarea, tr.taskdone td select { opacity: .5; }
   tr.taskdone td textarea[data-f="notes"] { text-decoration: line-through; }
+  /* Note column + modal */
+  .colnote { width: 74px; text-align: center; }
+  .notebtn { cursor: pointer; background: none; border: 1px solid var(--line); border-radius: 8px;
+    padding: 5px 9px; font-size: 15px; color: var(--muted); position: relative; }
+  .notebtn:hover { border-color: var(--accent); color: var(--txt); }
+  .notebtn.has { color: var(--accent); border-color: var(--accent); background: rgba(245,166,35,.14); }
+  .notebtn .badge { position: absolute; top: -6px; right: -6px; background: var(--accent); color: #1a1205;
+    border-radius: 999px; min-width: 16px; height: 16px; padding: 0 3px; font-size: 10px; line-height: 16px; font-weight: 800; }
+  #notemodal { position: fixed; inset: 0; z-index: 90; background: rgba(0,0,0,.62);
+    display: flex; align-items: center; justify-content: center; padding: 20px; }
+  #notemodal .nbox { background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    width: 100%; max-width: 640px; max-height: 90vh; display: flex; flex-direction: column; padding: 20px; }
+  #notemodal .nhead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  #notemodal .nhead h3 { margin: 0; font-size: 17px; }
+  #notemodal .nx { background: none; border: none; color: var(--muted); font-size: 19px; cursor: pointer; line-height: 1; }
+  #notemodal .nx:hover { color: var(--txt); }
+  #note-text { width: 100%; min-height: 220px; resize: vertical; background: var(--panel2);
+    border: 1px solid var(--line); color: var(--txt); border-radius: 9px; padding: 12px; font: inherit; line-height: 1.5; }
+  #notemodal .nfiles { margin-top: 16px; }
+  #notemodal .nfiles .lbl { font-size: 12px; color: var(--muted); margin-bottom: 7px; font-weight: 700; }
+  #notemodal .nfoot { display: flex; justify-content: space-between; align-items: center; margin-top: 18px; gap: 10px; }
+  #notemodal .nfoot .msg { font-size: 12px; color: var(--muted); }
   #gate {
     position: fixed; inset: 0; z-index: 100; background: var(--bg);
     display: flex; align-items: center; justify-content: center; padding: 24px;
@@ -174,6 +196,24 @@
     <span class="msg" id="msg"></span>
   </div>
 </main>
+
+<div id="notemodal" style="display:none">
+  <div class="nbox">
+    <div class="nhead">
+      <h3 id="note-title">Note</h3>
+      <button class="nx" id="note-close" title="Close">✕</button>
+    </div>
+    <textarea id="note-text" placeholder="Write a note for this task…"></textarea>
+    <div class="nfiles">
+      <div class="lbl">Attachments</div>
+      <div id="note-files"></div>
+    </div>
+    <div class="nfoot">
+      <span class="msg" id="note-msg"></span>
+      <button class="btn primary" id="note-save">Save note</button>
+    </div>
+  </div>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
@@ -521,6 +561,7 @@ async function loadTasks() {
     status: TASK_STATUS.includes(r.status) ? r.status : (r.status === "done" ? "done" : "on_track"), owner: r.owner || "",
     priority: r.priority || "med", due_date: r.due_date || "",
     attachments: Array.isArray(r.attachments) ? r.attachments : [],
+    memo: r.memo || "",
   }));
   loadedIds = new Set(tasksRows.map(r => r.id));
   removedIds = new Set();
@@ -560,7 +601,7 @@ function renderTasks() {
   const thead = `<thead><tr>
         <th class="colnotes">detail</th>
         <th class="colowner">assigned to</th><th class="coldue">due ${taskSortByDue ? "↑" : ""}</th>
-        <th class="colfiles">files</th>
+        <th class="colnote">note</th>
         <th class="colstatus">status</th><th class="colact"></th>
       </tr></thead>`;
   const rowHtml = (r) => {
@@ -577,7 +618,7 @@ function renderTasks() {
         <td class="colnotes"><textarea rows="2" data-i="${i}" data-f="notes" placeholder="What needs doing">${esc(r.notes)}</textarea></td>
         <td class="colowner"><select data-i="${i}" data-f="owner">${ownerOpts}</select></td>
         <td class="coldue"><input type="date" value="${esc(r.due_date)}" data-i="${i}" data-f="due_date" onclick="try{this.showPicker()}catch(e){}"></td>
-        <td class="colfiles">${renderAttachments(r, i)}</td>
+        <td class="colnote">${renderNoteCell(r, i)}</td>
         <td class="colstatus"><select class="statussel status-${st}" data-i="${i}" data-f="status">${statusOpts}</select></td>
         <td class="act colact">
           <button class="btn move" data-up="${i}" title="Move up"${taskSortByDue || si === 0 ? " disabled" : ""}>▲</button>
@@ -636,25 +677,22 @@ function wireTaskInputs() {
     renderTasks(); markDirty();
   }));
   contentEl.querySelectorAll("[data-addtask]").forEach(b => b.addEventListener("click", () => {
-    tasksRows.push({ id: uid("task"), title: "", notes: "", category: b.dataset.addtask || "", status: "on_track", owner: "", priority: "med", due_date: "", attachments: [] });
+    tasksRows.push({ id: uid("task"), title: "", notes: "", category: b.dataset.addtask || "", status: "on_track", owner: "", priority: "med", due_date: "", attachments: [], memo: "" });
     renderTasks(); markDirty();
   }));
   const addCat = contentEl.querySelector("[data-addcat]");
   if (addCat) addCat.addEventListener("click", () => {
     const name = prompt("New category name:");
     if (name === null) return;
-    tasksRows.push({ id: uid("task"), title: "", notes: "", category: name.trim(), status: "on_track", owner: "", priority: "med", due_date: "", attachments: [] });
+    tasksRows.push({ id: uid("task"), title: "", notes: "", category: name.trim(), status: "on_track", owner: "", priority: "med", due_date: "", attachments: [], memo: "" });
     renderTasks(); markDirty();
   });
   contentEl.querySelectorAll("[data-up]").forEach(b => b.addEventListener("click", () => moveTask(+b.dataset.up, -1)));
   contentEl.querySelectorAll("[data-down]").forEach(b => b.addEventListener("click", () => moveTask(+b.dataset.down, 1)));
   const sortBtn = contentEl.querySelector("#task-sortdue");
   if (sortBtn) sortBtn.addEventListener("click", () => { taskSortByDue = !taskSortByDue; renderTasks(); });
-  contentEl.querySelectorAll("[data-fileup]").forEach(inp => inp.addEventListener("change", () => {
-    if (inp.files && inp.files.length) uploadTaskFiles(+inp.dataset.fileup, Array.from(inp.files));
-  }));
-  contentEl.querySelectorAll(".filex").forEach(b =>
-    b.addEventListener("click", () => removeAttachment(+b.dataset.fi, +b.dataset.fk)));
+  contentEl.querySelectorAll("[data-note]").forEach(b =>
+    b.addEventListener("click", () => openNoteModal(+b.dataset.note)));
 }
 
 // Swap a task with its nearest sibling (same category + done-state). The global
@@ -676,13 +714,52 @@ function moveTask(i, dir) {
   renderTasks(); markDirty();
 }
 
-function renderAttachments(r, i) {
+// Row cell: a single icon that opens the note modal. Fills in when the task
+// carries a note and/or attachments so it stays visible on the board.
+function renderNoteCell(r, i) {
+  const nFiles = Array.isArray(r.attachments) ? r.attachments.length : 0;
+  const has = !!(r.memo || "").trim() || nFiles > 0;
+  const badge = nFiles ? `<span class="badge">${nFiles}</span>` : "";
+  const glyph = has ? "🗒" : "＋";
+  const title = has ? "View / edit note" : "Add a note";
+  return `<button class="notebtn ${has ? "has" : ""}" data-note="${i}" title="${title}">${glyph}${badge}</button>`;
+}
+
+// Attachment chips + add button, rendered inside the note modal.
+function renderModalAttachments(r, i) {
   const files = Array.isArray(r.attachments) ? r.attachments : [];
   const chips = files.map((f, k) =>
     `<span class="filechip"><a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.name)}</a>` +
     `<button class="filex" data-fi="${i}" data-fk="${k}" title="Remove">✕</button></span>`).join("");
   return `<div class="files">${chips}` +
     `<label class="btn attach" title="Attach files">＋<input type="file" data-fileup="${i}" hidden multiple></label></div>`;
+}
+
+let noteIdx = -1;
+function openNoteModal(i) {
+  noteIdx = i;
+  const r = tasksRows[i];
+  const label = (r.notes || "").trim();
+  document.getElementById("note-title").textContent = label ? ("Note · " + label.slice(0, 60)) : "Note";
+  document.getElementById("note-text").value = r.memo || "";
+  document.getElementById("note-msg").textContent = "";
+  renderModalFiles();
+  document.getElementById("notemodal").style.display = "flex";
+  document.getElementById("note-text").focus();
+}
+function closeNoteModal() {
+  document.getElementById("notemodal").style.display = "none";
+  noteIdx = -1;
+}
+function renderModalFiles() {
+  if (noteIdx < 0) return;
+  const box = document.getElementById("note-files");
+  box.innerHTML = renderModalAttachments(tasksRows[noteIdx], noteIdx);
+  box.querySelectorAll("[data-fileup]").forEach(inp => inp.addEventListener("change", () => {
+    if (inp.files && inp.files.length) uploadTaskFiles(+inp.dataset.fileup, Array.from(inp.files));
+  }));
+  box.querySelectorAll(".filex").forEach(b =>
+    b.addEventListener("click", () => removeAttachment(+b.dataset.fi, +b.dataset.fk)));
 }
 
 async function uploadTaskFiles(i, fileList) {
@@ -700,7 +777,9 @@ async function uploadTaskFiles(i, fileList) {
     const { data } = sb.storage.from("task-files").getPublicUrl(path);
     row.attachments.push({ name: file.name, url: data.publicUrl, path });
   }
-  renderTasks(); markDirty();
+  renderTasks(); renderModalFiles(); markDirty();
+  const nm = document.getElementById("note-msg");
+  if (nm) nm.textContent = "File attached. Hit Save note to keep it.";
   setMsg("File attached. Click Save to keep it on the task.", "");
 }
 
@@ -711,7 +790,7 @@ async function removeAttachment(i, k) {
   if (!confirm("Remove \"" + (f.name || "file") + "\"?")) return;
   if (f.path) { try { await sb.storage.from("task-files").remove([f.path]); } catch (e) {} }
   row.attachments.splice(k, 1);
-  renderTasks(); markDirty();
+  renderTasks(); renderModalFiles(); markDirty();
 }
 
 async function saveTasks() {
@@ -730,6 +809,7 @@ async function saveTasks() {
     status: TASK_STATUS.includes(r.status) ? r.status : "on_track", owner: r.owner || null,
     priority: r.priority || "med", due_date: r.due_date || null, sort_order: i,
     attachments: Array.isArray(r.attachments) ? r.attachments : [],
+    memo: (r.memo || "").trim() || null,
   }));
   const { error } = await sb.from("tasks").upsert(payload);
   if (error) { setMsg("Save failed: " + error.message, "err"); return; }
@@ -786,6 +866,39 @@ document.getElementById("reload").addEventListener("click", async () => {
   if (isDirty && !confirm("Discard unsaved changes and reload?")) return;
   isDirty = false;
   await loadCurrent();
+});
+
+// ---------------- note modal ----------------
+document.getElementById("note-text").addEventListener("input", (e) => {
+  if (noteIdx < 0) return;
+  tasksRows[noteIdx].memo = e.target.value;
+});
+document.getElementById("note-close").addEventListener("click", closeNoteModal);
+document.getElementById("notemodal").addEventListener("click", (e) => {
+  if (e.target.id === "notemodal") closeNoteModal();   // click backdrop to close
+});
+document.getElementById("note-save").addEventListener("click", async () => {
+  if (noteIdx < 0) return;
+  const r = tasksRows[noteIdx];
+  r.memo = document.getElementById("note-text").value;
+  const btn = document.getElementById("note-save");
+  const nm = document.getElementById("note-msg");
+  btn.disabled = true; nm.textContent = "Saving…";
+  // Persist just this row so the note + files stay constant without a full board save.
+  const { error } = await sb.from("tasks").upsert({
+    id: r.id.trim(), title: (r.notes || "").trim(), notes: r.notes || null,
+    category: (r.category || "").trim() || null,
+    status: TASK_STATUS.includes(r.status) ? r.status : "on_track", owner: r.owner || null,
+    priority: r.priority || "med", due_date: r.due_date || null,
+    attachments: Array.isArray(r.attachments) ? r.attachments : [],
+    memo: (r.memo || "").trim() || null,
+  });
+  btn.disabled = false;
+  if (error) { nm.textContent = "Save failed: " + error.message; return; }
+  loadedIds.add(r.id.trim());
+  renderTasks();
+  closeNoteModal();
+  setMsg("Note saved.", "ok");
 });
 
 // ---------------- passcode gate ----------------
