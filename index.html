@@ -98,6 +98,10 @@
   .grouphdr .caret { color: var(--muted); font-size: 20px; width: 22px; display: inline-block; }
   .catmove { display: inline-flex; gap: 4px; margin-left: 8px; }
   .catmove .btn.move { padding: 2px 7px; font-size: 12px; }
+  .taskfilter { display: flex; gap: 8px; align-items: center; margin: 4px 0 14px; }
+  .btn.mineonly.on { background: var(--accent); color: #1a1205; border-color: var(--accent); }
+  .taskfilter .minesel { padding: 7px 10px; border-radius: 8px; background: var(--panel2);
+    border: 1px solid var(--line); color: var(--txt); font-weight: 700; font-size: 13px; }
   .dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; flex: none; }
   .colowner { width: 130px; }
   .colpri { width: 120px; }
@@ -300,6 +304,8 @@ let upgradeRows = [];       // working copy (current scope only)
 let tasksRows = [];         // working copy (shared task board)
 let taskSortByDue = false;   // false = manual order, true = sort each group by due date
 let taskSortByOwner = false; // sort each group by assigned owner
+let taskMineOnly = false;    // "My Tasks only" filter toggle
+let taskOwnerFilter = "";    // whose tasks to show when the filter is on
 let taskCollapsed = new Set(); // category keys whose block is collapsed
 let pendingFocusId = null;   // after a re-render, focus this row's detail textarea
 let removedIds = new Set(); // ids deleted in this session, per table flush
@@ -656,10 +662,20 @@ function renderTasks() {
         </td>
       </tr>`;
   };
+  // "My Tasks only" filter bar, pinned above the first category.
+  const filterOn = taskMineOnly && !!taskOwnerFilter;
+  const mineOpts = TASK_OWNERS.filter(o => o).map(o =>
+    `<option value="${esc(o)}" ${o === taskOwnerFilter ? "selected" : ""}>${esc(o)}</option>`).join("");
+  html += `<div class="taskfilter">
+      <button class="btn mineonly${taskMineOnly ? " on" : ""}" data-mineonly="1">My Tasks only</button>
+      <select class="minesel" data-minesel="1"><option value="">Select name…</option>${mineOpts}</select>
+    </div>`;
+  const mineMatch = (r) => !filterOn || (r.owner || "").trim() === taskOwnerFilter;
   // Category blocks show LIVE (non-archived) tasks, done ones included so they
   // stay visible for review until archived. Archived tasks collect below.
   cats.forEach((cat, ci) => {
-    let live = tasksRows.filter(r => (r.category || "").trim() === cat && !r.archived);
+    let live = tasksRows.filter(r => (r.category || "").trim() === cat && !r.archived && mineMatch(r));
+    if (filterOn && live.length === 0) return;   // hide categories with none of my tasks
     live = applySort(live);
     const doneCount = live.filter(r => r.status === "done").length;
     const label = cat || "Uncategorized";
@@ -679,7 +695,7 @@ function renderTasks() {
   });
   html += `<button class="btn add" data-addcat="1" style="margin-top:4px">+ Add category</button>`;
   // Single "Archived" section at the very bottom of the whole board.
-  let archRows = tasksRows.filter(r => r.archived);
+  let archRows = tasksRows.filter(r => r.archived && mineMatch(r));
   if (archRows.length) {
     archRows = applySort(archRows);
     const aCollapsed = taskCollapsed.has("__archived__");
@@ -790,6 +806,16 @@ function wireTaskInputs() {
   }));
   contentEl.querySelectorAll("[data-note]").forEach(b =>
     b.addEventListener("click", () => openNoteModal(+b.dataset.note)));
+  const mineBtn = contentEl.querySelector("[data-mineonly]");
+  if (mineBtn) mineBtn.addEventListener("click", () => {
+    taskMineOnly = !taskMineOnly; renderTasks();
+  });
+  const mineSel = contentEl.querySelector("[data-minesel]");
+  if (mineSel) mineSel.addEventListener("change", () => {
+    taskOwnerFilter = mineSel.value;
+    if (taskOwnerFilter) taskMineOnly = true;   // picking a name turns the filter on
+    renderTasks();
+  });
 }
 
 // Swap a task with its nearest sibling (same category + archive-state). The global
