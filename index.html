@@ -669,6 +669,8 @@ function renderTasks() {
         <span class="catmove">
           <button class="btn move" data-catup="${esc(cat)}" title="Move category up"${ci === 0 ? " disabled" : ""}>▲</button>
           <button class="btn move" data-catdown="${esc(cat)}" title="Move category down"${ci === cats.length - 1 ? " disabled" : ""}>▼</button>
+          <button class="btn" data-catedit="${esc(cat)}" title="Rename category">✎</button>
+          <button class="btn danger" data-catdel="${esc(cat)}" title="Delete category">🗑</button>
         </span>
       </h2>
       ${collapsed ? "" : `<table>${thead}<tbody>${live.map(rowHtml).join("")}</tbody></table>
@@ -751,6 +753,12 @@ function wireTaskInputs() {
   contentEl.querySelectorAll("[data-catdown]").forEach(b => b.addEventListener("click", (e) => {
     e.stopPropagation(); moveCategory(b.dataset.catdown, 1);
   }));
+  contentEl.querySelectorAll("[data-catedit]").forEach(b => b.addEventListener("click", (e) => {
+    e.stopPropagation(); renameCategory(b.dataset.catedit);
+  }));
+  contentEl.querySelectorAll("[data-catdel]").forEach(b => b.addEventListener("click", (e) => {
+    e.stopPropagation(); deleteCategory(b.dataset.catdel);
+  }));
   contentEl.querySelectorAll("[data-arch]").forEach(b => b.addEventListener("click", () => {
     tasksRows[+b.dataset.arch].archived = true; renderTasks(); markDirty();
   }));
@@ -794,6 +802,32 @@ function moveCategory(cat, dir) {
   cats.forEach(c => byCat[c] = []);
   tasksRows.forEach(r => { const c = (r.category || "").trim(); (byCat[c] ||= []).push(r); });
   tasksRows = cats.flatMap(c => byCat[c]);
+  renderTasks(); markDirty();
+}
+
+// Rename a category: retitle every row (live and archived) that carries it.
+function renameCategory(cat) {
+  cat = (cat || "").trim();
+  const label = cat || "Uncategorized";
+  const next = prompt("Rename category:", cat);
+  if (next === null) return;
+  const trimmed = next.trim();
+  if (trimmed === cat) return;
+  tasksRows.forEach(r => { if ((r.category || "").trim() === cat) r.category = trimmed; });
+  // Carry any collapsed state over to the new key.
+  if (taskCollapsed.has(cat)) { taskCollapsed.delete(cat); taskCollapsed.add(trimmed); }
+  renderTasks(); markDirty();
+}
+
+// Delete a whole category and every task in it, after confirming.
+function deleteCategory(cat) {
+  cat = (cat || "").trim();
+  const label = cat || "Uncategorized";
+  const doomed = tasksRows.filter(r => (r.category || "").trim() === cat);
+  if (!confirm(`Delete category "${label}" and its ${doomed.length} task${doomed.length === 1 ? "" : "s"}? This cannot be undone.`)) return;
+  doomed.forEach(r => { if (loadedIds.has(r.id)) removedIds.add(r.id); });
+  tasksRows = tasksRows.filter(r => (r.category || "").trim() !== cat);
+  taskCollapsed.delete(cat);
   renderTasks(); markDirty();
 }
 
