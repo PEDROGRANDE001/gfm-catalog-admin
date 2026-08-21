@@ -696,6 +696,15 @@ function wireTaskInputs() {
       el.addEventListener(evt, () => { tasksRows[+el.dataset.i][f] = el.value; markDirty(); });
     }
   });
+  contentEl.querySelectorAll('textarea[data-f="notes"]').forEach(t => t.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {   // Enter saves the row; Shift+Enter = newline
+      e.preventDefault();
+      const i = +t.dataset.i;
+      tasksRows[i].notes = t.value;
+      saveOneTask(i);
+      t.blur();
+    }
+  }));
   contentEl.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", () => {
     const i = +b.dataset.del, row = tasksRows[i];
     if (!confirm("Delete task \"" + ((row.notes || "").trim() || row.id) + "\"?")) return;
@@ -835,6 +844,29 @@ async function removeAttachment(i, k) {
   renderTasks(); renderModalFiles(); markDirty();
 }
 
+// Single row -> DB row. Shared by full save, note save, and Enter-to-save.
+function taskPayload(r, i) {
+  return {
+    id: r.id.trim(), title: (r.notes || "").trim(), notes: r.notes || null,
+    category: (r.category || "").trim() || null,
+    status: TASK_STATUS.includes(r.status) ? r.status : "none", owner: r.owner || null,
+    priority: r.priority || "med", due_date: r.due_date || null, sort_order: i,
+    attachments: Array.isArray(r.attachments) ? r.attachments : [],
+    memo: (r.memo || "").trim() || null, archived: !!r.archived,
+  };
+}
+
+// Monday-style: hit Enter in a task's detail and just that row saves to the cloud.
+async function saveOneTask(i) {
+  const r = tasksRows[i];
+  if (!(r.notes || "").trim()) return;   // nothing to commit yet
+  setMsg("Saving…");
+  const { error } = await sb.from("tasks").upsert(taskPayload(r, i));
+  if (error) { setMsg("Save failed: " + error.message, "err"); return; }
+  loadedIds.add(r.id.trim());
+  setMsg("Saved.", "ok");
+}
+
 async function saveTasks() {
   const ids = tasksRows.map(r => r.id.trim());
   if (ids.some(x => !x)) { setMsg("Every task needs an id.", "err"); return; }
@@ -845,14 +877,7 @@ async function saveTasks() {
     const { error } = await sb.from("tasks").delete().eq("id", id);
     if (error) { setMsg("Delete failed: " + error.message, "err"); return; }
   }
-  const payload = tasksRows.map((r, i) => ({
-    id: r.id.trim(), title: (r.notes || "").trim(), notes: r.notes || null,
-    category: (r.category || "").trim() || null,
-    status: TASK_STATUS.includes(r.status) ? r.status : "none", owner: r.owner || null,
-    priority: r.priority || "med", due_date: r.due_date || null, sort_order: i,
-    attachments: Array.isArray(r.attachments) ? r.attachments : [],
-    memo: (r.memo || "").trim() || null, archived: !!r.archived,
-  }));
+  const payload = tasksRows.map((r, i) => taskPayload(r, i));
   const { error } = await sb.from("tasks").upsert(payload);
   if (error) { setMsg("Save failed: " + error.message, "err"); return; }
   setMsg("Saved " + payload.length + " tasks.", "ok");
