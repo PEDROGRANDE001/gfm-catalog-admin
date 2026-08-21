@@ -594,7 +594,7 @@ function taskSiblings(r) {
 
 function renderTasks() {
   scopebarEl.style.display = "none";
-  hintEl.textContent = "Shared board for Peter + Patrick. Group by category, assign an owner, tick the box to complete (done tasks drop to the bottom). Changes save to the cloud on Save.";
+  hintEl.textContent = "";
   const cats = taskCategories();
   const byDue = (a, b) => {                       // blank due dates sink to the bottom
     const da = a.due_date || "", db = b.due_date || "";
