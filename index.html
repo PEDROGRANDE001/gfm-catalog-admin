@@ -110,6 +110,9 @@
   }
   .colstatus { width: 160px; }
   td select.statussel { font-weight: 800; }
+  td select.status-on_track { color: var(--ok, #2ecc71); }
+  td select.status-stuck { color: var(--danger, #e74c3c); }
+  td select.status-done { color: var(--muted); }
   .colnotes { width: 640px; }
   .colnotes textarea { min-height: 46px; line-height: 1.4; }
   .colcat2 { width: 150px; }
@@ -221,6 +224,8 @@ const TASK_STATUSES = [
   { id: "done",    label: "Done",          color: "#37c871" },
 ];
 const TASK_OWNERS = ["", "Peter", "Patrick", "Austin", "Shameen"];
+const TASK_STATUS = ["on_track", "stuck", "done"];
+const TASK_STATUS_LABEL = { on_track: "On track", stuck: "Stuck", done: "Done" };
 const TASK_PRIORITIES = [
   { id: "low",  label: "Low" },
   { id: "med",  label: "Medium" },
@@ -510,7 +515,7 @@ async function loadTasks() {
   if (error) { setStatus("read error", "err"); setMsg(error.message, "err"); return; }
   tasksRows = (data || []).map(r => ({
     id: r.id, title: r.title || "", notes: r.notes || "", category: r.category || "",
-    status: r.status === "done" ? "done" : "todo", owner: r.owner || "",
+    status: TASK_STATUS.includes(r.status) ? r.status : (r.status === "done" ? "done" : "on_track"), owner: r.owner || "",
     priority: r.priority || "med", due_date: r.due_date || "",
     attachments: Array.isArray(r.attachments) ? r.attachments : [],
   }));
@@ -550,7 +555,7 @@ function renderTasks() {
     <button class="btn ${taskSortByDue ? "on" : ""}" id="task-sortdue">${taskSortByDue ? "✓ " : ""}Sort by due date</button>
   </div>`;
   const thead = `<thead><tr>
-        <th class="colchk">done</th><th class="colnotes">detail</th>
+        <th class="colstatus">status</th><th class="colnotes">detail</th>
         <th class="colowner">assigned to</th><th class="coldue">due ${taskSortByDue ? "↑" : ""}</th>
         <th class="colfiles">files</th>
         <th class="colcat2">category</th><th class="colact"></th>
@@ -562,8 +567,11 @@ function renderTasks() {
     const si = sibs.indexOf(r);
     const ownerOpts = TASK_OWNERS.map(o =>
       `<option value="${esc(o)}" ${o === r.owner ? "selected" : ""}>${o ? esc(o) : "—"}</option>`).join("");
+    const st = TASK_STATUS.includes(r.status) ? r.status : "on_track";
+    const statusOpts = TASK_STATUS.map(s =>
+      `<option value="${s}" ${s === st ? "selected" : ""}>${TASK_STATUS_LABEL[s]}</option>`).join("");
     return `<tr class="${isDone ? "taskdone" : ""}">
-        <td class="chk colchk"><input type="checkbox" ${isDone ? "checked" : ""} data-i="${i}" data-f="done"></td>
+        <td class="colstatus"><select class="statussel status-${st}" data-i="${i}" data-f="status">${statusOpts}</select></td>
         <td class="colnotes"><textarea rows="2" data-i="${i}" data-f="notes" placeholder="What needs doing">${esc(r.notes)}</textarea></td>
         <td class="colowner"><select data-i="${i}" data-f="owner">${ownerOpts}</select></td>
         <td class="coldue"><input type="date" value="${esc(r.due_date)}" data-i="${i}" data-f="due_date" onclick="try{this.showPicker()}catch(e){}"></td>
@@ -605,10 +613,10 @@ function wireTaskInputs() {
   contentEl.querySelectorAll("input,textarea,select").forEach(el => {
     const f = el.dataset.f;
     if (!f) return;
-    if (f === "done") {
+    if (f === "status") {
       el.addEventListener("change", () => {
-        tasksRows[+el.dataset.i].status = el.checked ? "done" : "todo";
-        renderTasks(); markDirty();          // completed tasks sink to the bottom
+        tasksRows[+el.dataset.i].status = el.value;
+        renderTasks(); markDirty();          // done tasks sink to the bottom
       });
     } else if (f === "category") {
       el.addEventListener("input", () => { tasksRows[+el.dataset.i].category = el.value; markDirty(); });
@@ -626,14 +634,14 @@ function wireTaskInputs() {
     renderTasks(); markDirty();
   }));
   contentEl.querySelectorAll("[data-addtask]").forEach(b => b.addEventListener("click", () => {
-    tasksRows.push({ id: uid("task"), title: "", notes: "", category: b.dataset.addtask || "", status: "todo", owner: "", priority: "med", due_date: "", attachments: [] });
+    tasksRows.push({ id: uid("task"), title: "", notes: "", category: b.dataset.addtask || "", status: "on_track", owner: "", priority: "med", due_date: "", attachments: [] });
     renderTasks(); markDirty();
   }));
   const addCat = contentEl.querySelector("[data-addcat]");
   if (addCat) addCat.addEventListener("click", () => {
     const name = prompt("New category name:");
     if (name === null) return;
-    tasksRows.push({ id: uid("task"), title: "", notes: "", category: name.trim(), status: "todo", owner: "", priority: "med", due_date: "", attachments: [] });
+    tasksRows.push({ id: uid("task"), title: "", notes: "", category: name.trim(), status: "on_track", owner: "", priority: "med", due_date: "", attachments: [] });
     renderTasks(); markDirty();
   });
   contentEl.querySelectorAll("[data-up]").forEach(b => b.addEventListener("click", () => moveTask(+b.dataset.up, -1)));
@@ -717,7 +725,7 @@ async function saveTasks() {
   const payload = tasksRows.map((r, i) => ({
     id: r.id.trim(), title: (r.notes || "").trim(), notes: r.notes || null,
     category: (r.category || "").trim() || null,
-    status: r.status === "done" ? "done" : "todo", owner: r.owner || null,
+    status: TASK_STATUS.includes(r.status) ? r.status : "on_track", owner: r.owner || null,
     priority: r.priority || "med", due_date: r.due_date || null, sort_order: i,
     attachments: Array.isArray(r.attachments) ? r.attachments : [],
   }));
