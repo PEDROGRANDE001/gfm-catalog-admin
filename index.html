@@ -555,9 +555,10 @@ function renderTasks() {
     <button class="btn ${taskSortByDue ? "on" : ""}" id="task-sortdue">${taskSortByDue ? "✓ " : ""}Sort by due date</button>
   </div>`;
   const thead = `<thead><tr>
-        <th class="colstatus">status</th><th class="colnotes">detail</th>
+        <th class="colnotes">detail</th>
         <th class="colowner">assigned to</th><th class="coldue">due ${taskSortByDue ? "↑" : ""}</th>
         <th class="colfiles">files</th>
+        <th class="colstatus">status</th>
         <th class="colcat2">category</th><th class="colact"></th>
       </tr></thead>`;
   const rowHtml = (r) => {
@@ -571,11 +572,11 @@ function renderTasks() {
     const statusOpts = TASK_STATUS.map(s =>
       `<option value="${s}" ${s === st ? "selected" : ""}>${TASK_STATUS_LABEL[s]}</option>`).join("");
     return `<tr class="${isDone ? "taskdone" : ""}">
-        <td class="colstatus"><select class="statussel status-${st}" data-i="${i}" data-f="status">${statusOpts}</select></td>
         <td class="colnotes"><textarea rows="2" data-i="${i}" data-f="notes" placeholder="What needs doing">${esc(r.notes)}</textarea></td>
         <td class="colowner"><select data-i="${i}" data-f="owner">${ownerOpts}</select></td>
         <td class="coldue"><input type="date" value="${esc(r.due_date)}" data-i="${i}" data-f="due_date" onclick="try{this.showPicker()}catch(e){}"></td>
         <td class="colfiles">${renderAttachments(r, i)}</td>
+        <td class="colstatus"><select class="statussel status-${st}" data-i="${i}" data-f="status">${statusOpts}</select></td>
         <td class="colcat2"><input value="${esc(r.category)}" data-i="${i}" data-f="category" placeholder="Category"></td>
         <td class="act colact">
           <button class="btn move" data-up="${i}" title="Move up"${taskSortByDue || si === 0 ? " disabled" : ""}>▲</button>
