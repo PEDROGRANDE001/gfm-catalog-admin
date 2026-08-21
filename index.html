@@ -110,9 +110,12 @@
   }
   .colstatus { width: 160px; }
   td select.statussel { font-weight: 800; }
-  td select.status-on_track { color: var(--ok, #2ecc71); }
-  td select.status-stuck { color: var(--danger, #e74c3c); }
-  td select.status-done { color: var(--muted); }
+  td select.status-on_track { color: #2ecc71; }
+  td select.status-stuck { color: #e74c3c; }
+  td select.status-done { color: #3b9dff; }
+  td select.statussel option[value="on_track"] { color: #2ecc71; }
+  td select.statussel option[value="stuck"] { color: #e74c3c; }
+  td select.statussel option[value="done"] { color: #3b9dff; }
   .colnotes { width: 640px; }
   .colnotes textarea { min-height: 46px; line-height: 1.4; }
   .colcat2 { width: 150px; }
