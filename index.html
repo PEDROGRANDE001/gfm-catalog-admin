@@ -608,13 +608,13 @@ function renderTasks() {
     : taskSortByDue ? list.slice().sort(byDue)
     : list;
   const sortActive = taskSortByDue || taskSortByOwner;
-  let html = `<div class="tasktools">
-    <button class="btn ${taskSortByDue ? "on" : ""}" id="task-sortdue">${taskSortByDue ? "✓ " : ""}Sort by due date</button>
-    <button class="btn ${taskSortByOwner ? "on" : ""}" id="task-sortowner">${taskSortByOwner ? "✓ " : ""}Sort by assigned to</button>
-  </div>`;
+  const ownerArrow = taskSortByOwner ? "▲" : "⇅";
+  const dueArrow = taskSortByDue ? "▲" : "⇅";
+  let html = "";
   const thead = `<thead><tr>
         <th class="colnotes">detail</th>
-        <th class="colowner">assigned to</th><th class="coldue">due ${taskSortByDue ? "↑" : ""}</th>
+        <th class="colowner sortable" data-sortown="1">assigned to <span class="arrow">${ownerArrow}</span></th>
+        <th class="coldue sortable" data-sortdue="1">due <span class="arrow">${dueArrow}</span></th>
         <th class="colnote">note</th>
         <th class="colstatus">status</th><th class="colact"></th>
       </tr></thead>`;
@@ -703,10 +703,12 @@ function wireTaskInputs() {
   });
   contentEl.querySelectorAll("[data-up]").forEach(b => b.addEventListener("click", () => moveTask(+b.dataset.up, -1)));
   contentEl.querySelectorAll("[data-down]").forEach(b => b.addEventListener("click", () => moveTask(+b.dataset.down, 1)));
-  const sortBtn = contentEl.querySelector("#task-sortdue");
-  if (sortBtn) sortBtn.addEventListener("click", () => { taskSortByDue = !taskSortByDue; taskSortByOwner = false; renderTasks(); });
-  const sortOwnerBtn = contentEl.querySelector("#task-sortowner");
-  if (sortOwnerBtn) sortOwnerBtn.addEventListener("click", () => { taskSortByOwner = !taskSortByOwner; taskSortByDue = false; renderTasks(); });
+  contentEl.querySelectorAll("[data-sortdue]").forEach(h => h.addEventListener("click", () => {
+    taskSortByDue = !taskSortByDue; taskSortByOwner = false; renderTasks();
+  }));
+  contentEl.querySelectorAll("[data-sortown]").forEach(h => h.addEventListener("click", () => {
+    taskSortByOwner = !taskSortByOwner; taskSortByDue = false; renderTasks();
+  }));
   contentEl.querySelectorAll("[data-note]").forEach(b =>
     b.addEventListener("click", () => openNoteModal(+b.dataset.note)));
 }
