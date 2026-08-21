@@ -558,8 +558,7 @@ function renderTasks() {
         <th class="colnotes">detail</th>
         <th class="colowner">assigned to</th><th class="coldue">due ${taskSortByDue ? "↑" : ""}</th>
         <th class="colfiles">files</th>
-        <th class="colstatus">status</th>
-        <th class="colcat2">category</th><th class="colact"></th>
+        <th class="colstatus">status</th><th class="colact"></th>
       </tr></thead>`;
   const rowHtml = (r) => {
     const i = tasksRows.indexOf(r);
@@ -577,7 +576,6 @@ function renderTasks() {
         <td class="coldue"><input type="date" value="${esc(r.due_date)}" data-i="${i}" data-f="due_date" onclick="try{this.showPicker()}catch(e){}"></td>
         <td class="colfiles">${renderAttachments(r, i)}</td>
         <td class="colstatus"><select class="statussel status-${st}" data-i="${i}" data-f="status">${statusOpts}</select></td>
-        <td class="colcat2"><input value="${esc(r.category)}" data-i="${i}" data-f="category" placeholder="Category"></td>
         <td class="act colact">
           <button class="btn move" data-up="${i}" title="Move up"${taskSortByDue || si === 0 ? " disabled" : ""}>▲</button>
           <button class="btn move" data-down="${i}" title="Move down"${taskSortByDue || si === sibs.length - 1 ? " disabled" : ""}>▼</button>
