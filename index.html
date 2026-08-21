@@ -666,6 +666,9 @@ function renderAttachments(r, i) {
 async function uploadTaskFiles(i, fileList) {
   const row = tasksRows[i];
   if (!Array.isArray(row.attachments)) row.attachments = [];
+  const MAX = 10 * 1024 * 1024;
+  const toobig = fileList.find(f => f.size > MAX);
+  if (toobig) { setMsg(`"${toobig.name}" is over the 10 MB limit.`, "err"); return; }
   setMsg("Uploading…");
   for (const file of fileList) {
     const clean = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
