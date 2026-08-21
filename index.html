@@ -114,7 +114,7 @@
   .colnotes textarea { min-height: 46px; line-height: 1.4; }
   .colcat2 { width: 150px; }
   tr.taskdone td input, tr.taskdone td textarea, tr.taskdone td select { opacity: .5; }
-  tr.taskdone td input[data-f="title"] { text-decoration: line-through; }
+  tr.taskdone td textarea[data-f="notes"] { text-decoration: line-through; }
   #gate {
     position: fixed; inset: 0; z-index: 100; background: var(--bg);
     display: flex; align-items: center; justify-content: center; padding: 24px;
@@ -550,7 +550,7 @@ function renderTasks() {
     <button class="btn ${taskSortByDue ? "on" : ""}" id="task-sortdue">${taskSortByDue ? "✓ " : ""}Sort by due date</button>
   </div>`;
   const thead = `<thead><tr>
-        <th class="colchk">done</th><th>task</th><th class="colnotes">detail</th>
+        <th class="colchk">done</th><th class="colnotes">detail</th>
         <th class="colowner">assigned to</th><th class="coldue">due ${taskSortByDue ? "↑" : ""}</th>
         <th class="colfiles">files</th>
         <th class="colcat2">category</th><th class="colact"></th>
@@ -564,8 +564,7 @@ function renderTasks() {
       `<option value="${esc(o)}" ${o === r.owner ? "selected" : ""}>${o ? esc(o) : "—"}</option>`).join("");
     return `<tr class="${isDone ? "taskdone" : ""}">
         <td class="chk colchk"><input type="checkbox" ${isDone ? "checked" : ""} data-i="${i}" data-f="done"></td>
-        <td><input value="${esc(r.title)}" data-i="${i}" data-f="title" placeholder="What needs doing"></td>
-        <td class="colnotes"><textarea rows="2" data-i="${i}" data-f="notes">${esc(r.notes)}</textarea></td>
+        <td class="colnotes"><textarea rows="2" data-i="${i}" data-f="notes" placeholder="What needs doing">${esc(r.notes)}</textarea></td>
         <td class="colowner"><select data-i="${i}" data-f="owner">${ownerOpts}</select></td>
         <td class="coldue"><input type="date" value="${esc(r.due_date)}" data-i="${i}" data-f="due_date" onclick="try{this.showPicker()}catch(e){}"></td>
         <td class="colfiles">${renderAttachments(r, i)}</td>
@@ -621,7 +620,7 @@ function wireTaskInputs() {
   });
   contentEl.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", () => {
     const i = +b.dataset.del, row = tasksRows[i];
-    if (!confirm("Delete task \"" + (row.title || row.id) + "\"?")) return;
+    if (!confirm("Delete task \"" + ((row.notes || "").trim() || row.id) + "\"?")) return;
     if (loadedIds.has(row.id)) removedIds.add(row.id);
     tasksRows.splice(i, 1);
     renderTasks(); markDirty();
@@ -709,14 +708,14 @@ async function saveTasks() {
   const ids = tasksRows.map(r => r.id.trim());
   if (ids.some(x => !x)) { setMsg("Every task needs an id.", "err"); return; }
   if (new Set(ids).size !== ids.length) { setMsg("Duplicate ids. Ids must be unique.", "err"); return; }
-  if (tasksRows.some(r => !r.title.trim())) { setMsg("Every task needs a title.", "err"); return; }
+  if (tasksRows.some(r => !(r.notes || "").trim())) { setMsg("Every task needs a detail.", "err"); return; }
   setMsg("Saving…");
   for (const id of removedIds) {
     const { error } = await sb.from("tasks").delete().eq("id", id);
     if (error) { setMsg("Delete failed: " + error.message, "err"); return; }
   }
   const payload = tasksRows.map((r, i) => ({
-    id: r.id.trim(), title: r.title.trim(), notes: r.notes || null,
+    id: r.id.trim(), title: (r.notes || "").trim(), notes: r.notes || null,
     category: (r.category || "").trim() || null,
     status: r.status === "done" ? "done" : "todo", owner: r.owner || null,
     priority: r.priority || "med", due_date: r.due_date || null, sort_order: i,
