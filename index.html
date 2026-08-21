@@ -93,6 +93,14 @@
   .colowner { width: 130px; }
   .colpri { width: 120px; }
   .coldue { width: 160px; }
+  .colfiles { width: 180px; }
+  .files { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+  .filechip { display: inline-flex; align-items: center; gap: 4px; background: rgba(255,255,255,.06);
+    border: 1px solid var(--line, #333); border-radius: 6px; padding: 2px 6px; font-size: 12px; max-width: 160px; }
+  .filechip a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 120px; }
+  .filechip .filex { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 11px; padding: 0; }
+  .filechip .filex:hover { color: #ff5a5a; }
+  .btn.attach { cursor: pointer; padding: 3px 9px; font-weight: 800; }
   .coldue input[type="date"] { cursor: pointer; }
   .coldue input[type="date"]::-webkit-calendar-picker-indicator {
     cursor: pointer; opacity: 1; font-size: 1.15em;
@@ -502,6 +510,7 @@ async function loadTasks() {
     id: r.id, title: r.title || "", notes: r.notes || "", category: r.category || "",
     status: r.status === "done" ? "done" : "todo", owner: r.owner || "",
     priority: r.priority || "med", due_date: r.due_date || "",
+    attachments: Array.isArray(r.attachments) ? r.attachments : [],
   }));
   loadedIds = new Set(tasksRows.map(r => r.id));
   removedIds = new Set();
@@ -550,6 +559,7 @@ function renderTasks() {
       <table><thead><tr>
         <th class="colchk">done</th><th>task</th><th class="colnotes">detail</th>
         <th class="colowner">assigned to</th><th class="coldue">due ${taskSortByDue ? "↑" : ""}</th>
+        <th class="colfiles">files</th>
         <th class="colcat2">category</th><th class="colact"></th>
       </tr></thead><tbody>`;
     ordered.forEach(r => {
@@ -565,6 +575,7 @@ function renderTasks() {
         <td class="colnotes"><textarea rows="2" data-i="${i}" data-f="notes">${esc(r.notes)}</textarea></td>
         <td class="colowner"><select data-i="${i}" data-f="owner">${ownerOpts}</select></td>
         <td class="coldue"><input type="date" value="${esc(r.due_date)}" data-i="${i}" data-f="due_date" onclick="try{this.showPicker()}catch(e){}"></td>
+        <td class="colfiles">${renderAttachments(r, i)}</td>
         <td class="colcat2"><input value="${esc(r.category)}" data-i="${i}" data-f="category" placeholder="Category"></td>
         <td class="act colact">
           <button class="btn move" data-up="${i}" title="Move up"${taskSortByDue || si === 0 ? " disabled" : ""}>▲</button>
@@ -606,20 +617,25 @@ function wireTaskInputs() {
     renderTasks(); markDirty();
   }));
   contentEl.querySelectorAll("[data-addtask]").forEach(b => b.addEventListener("click", () => {
-    tasksRows.push({ id: uid("task"), title: "", notes: "", category: b.dataset.addtask || "", status: "todo", owner: "", priority: "med", due_date: "" });
+    tasksRows.push({ id: uid("task"), title: "", notes: "", category: b.dataset.addtask || "", status: "todo", owner: "", priority: "med", due_date: "", attachments: [] });
     renderTasks(); markDirty();
   }));
   const addCat = contentEl.querySelector("[data-addcat]");
   if (addCat) addCat.addEventListener("click", () => {
     const name = prompt("New category name:");
     if (name === null) return;
-    tasksRows.push({ id: uid("task"), title: "", notes: "", category: name.trim(), status: "todo", owner: "", priority: "med", due_date: "" });
+    tasksRows.push({ id: uid("task"), title: "", notes: "", category: name.trim(), status: "todo", owner: "", priority: "med", due_date: "", attachments: [] });
     renderTasks(); markDirty();
   });
   contentEl.querySelectorAll("[data-up]").forEach(b => b.addEventListener("click", () => moveTask(+b.dataset.up, -1)));
   contentEl.querySelectorAll("[data-down]").forEach(b => b.addEventListener("click", () => moveTask(+b.dataset.down, 1)));
   const sortBtn = contentEl.querySelector("#task-sortdue");
   if (sortBtn) sortBtn.addEventListener("click", () => { taskSortByDue = !taskSortByDue; renderTasks(); });
+  contentEl.querySelectorAll("[data-fileup]").forEach(inp => inp.addEventListener("change", () => {
+    if (inp.files && inp.files.length) uploadTaskFiles(+inp.dataset.fileup, Array.from(inp.files));
+  }));
+  contentEl.querySelectorAll(".filex").forEach(b =>
+    b.addEventListener("click", () => removeAttachment(+b.dataset.fi, +b.dataset.fk)));
 }
 
 // Swap a task with its nearest sibling (same category + done-state). The global
@@ -638,6 +654,41 @@ function moveTask(i, dir) {
   renderTasks(); markDirty();
 }
 
+function renderAttachments(r, i) {
+  const files = Array.isArray(r.attachments) ? r.attachments : [];
+  const chips = files.map((f, k) =>
+    `<span class="filechip"><a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.name)}</a>` +
+    `<button class="filex" data-fi="${i}" data-fk="${k}" title="Remove">✕</button></span>`).join("");
+  return `<div class="files">${chips}` +
+    `<label class="btn attach" title="Attach files">＋<input type="file" data-fileup="${i}" hidden multiple></label></div>`;
+}
+
+async function uploadTaskFiles(i, fileList) {
+  const row = tasksRows[i];
+  if (!Array.isArray(row.attachments)) row.attachments = [];
+  setMsg("Uploading…");
+  for (const file of fileList) {
+    const clean = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const path = row.id + "/" + Date.now() + "-" + clean;
+    const { error } = await sb.storage.from("task-files").upload(path, file, { upsert: true });
+    if (error) { setMsg("Upload failed: " + error.message, "err"); return; }
+    const { data } = sb.storage.from("task-files").getPublicUrl(path);
+    row.attachments.push({ name: file.name, url: data.publicUrl, path });
+  }
+  renderTasks(); markDirty();
+  setMsg("File attached. Click Save to keep it on the task.", "");
+}
+
+async function removeAttachment(i, k) {
+  const row = tasksRows[i];
+  const f = (row.attachments || [])[k];
+  if (!f) return;
+  if (!confirm("Remove \"" + (f.name || "file") + "\"?")) return;
+  if (f.path) { try { await sb.storage.from("task-files").remove([f.path]); } catch (e) {} }
+  row.attachments.splice(k, 1);
+  renderTasks(); markDirty();
+}
+
 async function saveTasks() {
   const ids = tasksRows.map(r => r.id.trim());
   if (ids.some(x => !x)) { setMsg("Every task needs an id.", "err"); return; }
@@ -653,6 +704,7 @@ async function saveTasks() {
     category: (r.category || "").trim() || null,
     status: r.status === "done" ? "done" : "todo", owner: r.owner || null,
     priority: r.priority || "med", due_date: r.due_date || null, sort_order: i,
+    attachments: Array.isArray(r.attachments) ? r.attachments : [],
   }));
   const { error } = await sb.from("tasks").upsert(payload);
   if (error) { setMsg("Save failed: " + error.message, "err"); return; }
