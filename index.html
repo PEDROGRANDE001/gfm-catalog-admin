@@ -462,13 +462,14 @@ function renderScopebar() {
 // sections, anything else is "must". Render it as a dropdown so no typos slip in.
 // Any legacy/nonstandard value is preserved as a selectable option until changed.
 const TIER_OPTIONS = ["must", "rec", "nice"];
+const TIER_LABELS = { must: "Must have", rec: "Highly recommended", nice: "Nice to have" };
 function tierCell(r, i) {
   const cur = (r.tier == null ? "" : String(r.tier)).trim();
   const known = TIER_OPTIONS.includes(cur);
   let html = `<select class="tiersel" data-i="${i}" data-f="tier">`;
   if (!known) html += `<option value="${esc(cur)}" selected>${cur ? esc(cur) : "— none —"}</option>`;
   TIER_OPTIONS.forEach(o => {
-    html += `<option value="${o}" ${known && cur === o ? "selected" : ""}>${o}</option>`;
+    html += `<option value="${o}" ${known && cur === o ? "selected" : ""}>${TIER_LABELS[o]}</option>`;
   });
   html += `</select>`;
   return html;
@@ -532,7 +533,7 @@ function wireUpgradeInputs() {
   }));
   contentEl.querySelectorAll("[data-addup]").forEach(b => b.addEventListener("click", () => {
     const p = upgradeScope === "universal" ? "u" : upgradeScope;
-    upgradeRows.push({ id: uid(p), item: "", why: "", price_usd: "", tier: "must", url: "", search: "" });
+    upgradeRows.push({ id: uid(p), item: "", why: "", price_usd: "", tier: "rec", url: "", search: "" });
     renderUpgrades(); markDirty();
   }));
   const tierHead = contentEl.querySelector("[data-sorttier]");
