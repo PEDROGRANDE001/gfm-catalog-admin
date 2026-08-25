@@ -458,6 +458,22 @@ function renderScopebar() {
   }));
 }
 
+// Tier is a fixed vocabulary the app understands: "rec" and "nice" are their own
+// sections, anything else is "must". Render it as a dropdown so no typos slip in.
+// Any legacy/nonstandard value is preserved as a selectable option until changed.
+const TIER_OPTIONS = ["must", "rec", "nice"];
+function tierCell(r, i) {
+  const cur = (r.tier == null ? "" : String(r.tier)).trim();
+  const known = TIER_OPTIONS.includes(cur);
+  let html = `<select class="tiersel" data-i="${i}" data-f="tier">`;
+  if (!known) html += `<option value="${esc(cur)}" selected>${cur ? esc(cur) : "— none —"}</option>`;
+  TIER_OPTIONS.forEach(o => {
+    html += `<option value="${o}" ${known && cur === o ? "selected" : ""}>${o}</option>`;
+  });
+  html += `</select>`;
+  return html;
+}
+
 function renderUpgrades() {
   renderScopebar();
   const name = (BIKES.find(b => b.id === upgradeScope) || {}).name || upgradeScope;
@@ -473,7 +489,7 @@ function renderUpgrades() {
       <td><input value="${esc(r.item)}" data-i="${i}" data-f="item"></td>
       <td class="colwhy"><textarea rows="4" data-i="${i}" data-f="why">${esc(r.why)}</textarea></td>
       <td class="num colnum"><input type="number" step="1" value="${r.price_usd}" data-i="${i}" data-f="price_usd"></td>
-      <td class="coltier"><input value="${esc(r.tier)}" data-i="${i}" data-f="tier"></td>
+      <td class="coltier">${tierCell(r, i)}</td>
       <td><input value="${esc(r.url)}" data-i="${i}" data-f="url"></td>
       <td class="colsearch"><input value="${esc(r.search)}" data-i="${i}" data-f="search"></td>
       <td class="act colact">
@@ -498,6 +514,15 @@ function wireUpgradeInputs() {
       markDirty();
     });
   });
+  contentEl.querySelectorAll("select[data-f]").forEach(el => {
+    el.addEventListener("change", () => {
+      const i = +el.dataset.i, f = el.dataset.f;
+      if (i == null || !f) return;
+      upgradeRows[i][f] = el.value;
+      renderUpgrades();   // re-render so a normalized tier drops any legacy option
+      markDirty();
+    });
+  });
   contentEl.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", () => {
     const i = +b.dataset.del, row = upgradeRows[i];
     if (!confirm("Delete upgrade \"" + (row.item || row.id) + "\"?")) return;
@@ -507,7 +532,7 @@ function wireUpgradeInputs() {
   }));
   contentEl.querySelectorAll("[data-addup]").forEach(b => b.addEventListener("click", () => {
     const p = upgradeScope === "universal" ? "u" : upgradeScope;
-    upgradeRows.push({ id: uid(p), item: "", why: "", price_usd: "", tier: "", url: "", search: "" });
+    upgradeRows.push({ id: uid(p), item: "", why: "", price_usd: "", tier: "must", url: "", search: "" });
     renderUpgrades(); markDirty();
   }));
   const tierHead = contentEl.querySelector("[data-sorttier]");
