@@ -594,11 +594,27 @@ async function saveUpgrades() {
     if (error) { setMsg("Delete failed: " + error.message, "err"); return; }
   }
   const bikeId = upgradeScope === "universal" ? null : upgradeScope;
-  const payload = upgradeRows.map((r, i) => ({
-    id: r.id.trim(), bike_id: bikeId, item: r.item, why: r.why || "",
-    price_usd: r.price_usd === "" ? null : (Number(r.price_usd) || 0),
-    tier: r.tier || null, url: r.url || null, image_url: r.image_url || null, search: r.search || null, sort_order: i,
-  }));
+  // Only overwrite item / why / image / price when this page actually has a
+  // value for them. For an EXISTING row that's blank here we OMIT those columns
+  // so the upsert can't wipe a name, description, photo or price that Franka's
+  // sweep filled in after this page was loaded. Brand-new rows (not yet in the
+  // DB) always send them so the insert satisfies the column defaults.
+  const payload = upgradeRows.map((r, i) => {
+    const existing = loadedIds.has(r.id.trim());
+    const item = String(r.item || "").trim();
+    const why = String(r.why || "").trim();
+    const img = String(r.image_url || "").trim();
+    const hasPrice = r.price_usd !== "" && r.price_usd != null;
+    const row = {
+      id: r.id.trim(), bike_id: bikeId,
+      tier: r.tier || null, url: r.url || null, search: r.search || null, sort_order: i,
+    };
+    if (item || !existing) row.item = item;
+    if (why || !existing) row.why = why;
+    if (img) row.image_url = img; else if (!existing) row.image_url = null;
+    if (hasPrice) row.price_usd = Number(r.price_usd) || 0; else if (!existing) row.price_usd = null;
+    return row;
+  });
   const { error } = await sb.from("bike_upgrades").upsert(payload);
   if (error) { setMsg("Save failed: " + error.message, "err"); return; }
   const missing = upgradeRows.filter(r => !String(r.item||"").trim() || !String(r.why||"").trim() || !String(r.image_url||"").trim()).length;
