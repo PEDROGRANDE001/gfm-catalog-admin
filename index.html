@@ -77,6 +77,9 @@
   .colnum { width: 90px; }
   .colcat { width: 130px; }
   .coltier { width: 110px; }
+  .colimg { width: 70px; text-align: center; }
+  .colimg .thumb { max-width: 56px; max-height: 42px; border-radius: 4px; vertical-align: middle; }
+  .colimg .imgwarn { color: #c0392b; font-size: 11px; }
   .colchk { width: 60px; }
   .colact { width: 190px; white-space: nowrap; }
   .btn.move { padding: 5px 7px; color: var(--muted); background: transparent; border-color: transparent; }
@@ -205,6 +208,7 @@
   <div id="content"></div>
   <div class="savebar">
     <button class="btn primary" id="save">Save changes</button>
+    <button class="btn" id="askfranka" title="Save, then Franka fills in any missing name, description or photo on her next sweep">🪄 Ask Franka to fill blanks</button>
     <button class="btn" id="reload">Reload</button>
     <span class="msg" id="msg"></span>
   </div>
@@ -439,6 +443,7 @@ async function loadUpgrades() {
     id: r.id, item: r.item || "", why: r.why || "",
     price_usd: r.price_usd == null ? "" : Number(r.price_usd),
     tier: r.tier || "", url: r.url || "", search: r.search || "",
+    image_url: r.image_url || "",
   }));
   loadedIds = new Set(upgradeRows.map(r => r.id));
   removedIds = new Set();
@@ -482,7 +487,7 @@ function renderUpgrades() {
   let html = `<div class="catblock"><h2>${esc(name)} (${upgradeRows.length})</h2>
     <table><thead><tr>
       <th class="colid">id</th><th>item</th><th class="colwhy">why</th>
-      <th class="colnum">price $</th><th class="coltier sortable" data-sorttier="1">tier <span class="arrow">${tierSortDir === 1 ? "▲" : tierSortDir === -1 ? "▼" : "⇅"}</span></th><th>url</th><th class="colsearch">search</th><th class="colact"></th>
+      <th class="colnum">price $</th><th class="coltier sortable" data-sorttier="1">tier <span class="arrow">${tierSortDir === 1 ? "▲" : tierSortDir === -1 ? "▼" : "⇅"}</span></th><th>url</th><th>image url</th><th class="colimg">img</th><th class="colsearch">search</th><th class="colact"></th>
     </tr></thead><tbody>`;
   upgradeRows.forEach((r, i) => {
     html += `<tr>
@@ -492,6 +497,8 @@ function renderUpgrades() {
       <td class="num colnum"><input type="number" step="1" value="${r.price_usd}" data-i="${i}" data-f="price_usd"></td>
       <td class="coltier">${tierCell(r, i)}</td>
       <td><input value="${esc(r.url)}" data-i="${i}" data-f="url"></td>
+      <td><input value="${esc(r.image_url)}" data-i="${i}" data-f="image_url" placeholder="https://…/photo.jpg"></td>
+      <td class="colimg">${r.image_url ? `<img src="${esc(r.image_url)}" class="thumb" alt="" onerror="this.style.display='none';this.nextSibling.textContent='bad url';">` : ""}<span class="imgwarn">${r.image_url ? "" : "no image"}</span></td>
       <td class="colsearch"><input value="${esc(r.search)}" data-i="${i}" data-f="search"></td>
       <td class="act colact">
         <button class="btn move" data-up="${i}" title="Move up"${i === 0 ? " disabled" : ""}>▲</button>
@@ -533,7 +540,7 @@ function wireUpgradeInputs() {
   }));
   contentEl.querySelectorAll("[data-addup]").forEach(b => b.addEventListener("click", () => {
     const p = upgradeScope === "universal" ? "u" : upgradeScope;
-    upgradeRows.push({ id: uid(p), item: "", why: "", price_usd: "", tier: "rec", url: "", search: "" });
+    upgradeRows.push({ id: uid(p), item: "", why: "", price_usd: "", tier: "rec", url: "", image_url: "", search: "" });
     renderUpgrades(); markDirty();
   }));
   const tierHead = contentEl.querySelector("[data-sorttier]");
@@ -590,11 +597,13 @@ async function saveUpgrades() {
   const payload = upgradeRows.map((r, i) => ({
     id: r.id.trim(), bike_id: bikeId, item: r.item, why: r.why || "",
     price_usd: r.price_usd === "" ? null : (Number(r.price_usd) || 0),
-    tier: r.tier || null, url: r.url || null, search: r.search || null, sort_order: i,
+    tier: r.tier || null, url: r.url || null, image_url: r.image_url || null, search: r.search || null, sort_order: i,
   }));
   const { error } = await sb.from("bike_upgrades").upsert(payload);
   if (error) { setMsg("Save failed: " + error.message, "err"); return; }
-  setMsg("Saved " + payload.length + " upgrades. Live on phones now.", "ok");
+  const missing = upgradeRows.filter(r => !String(r.item||"").trim() || !String(r.why||"").trim() || !String(r.image_url||"").trim()).length;
+  const tail = missing ? ` ${missing} still need a name, description or photo — hit "Ask Franka to fill blanks" and she'll complete them on her next sweep (usually under 30 min).` : "";
+  setMsg("Saved " + payload.length + " upgrades. Live on phones now." + tail, "ok");
   await loadUpgrades();
 }
 
@@ -1148,6 +1157,23 @@ document.getElementById("save").addEventListener("click", async () => {
   document.getElementById("save").disabled = true;
   try { await saveCurrent(); isDirty = false; }
   finally { document.getElementById("save").disabled = false; }
+});
+document.getElementById("askfranka").addEventListener("click", async () => {
+  const btn = document.getElementById("askfranka");
+  btn.disabled = true;
+  try {
+    // Save first so the incomplete rows are in the database for Franka's sweep to find.
+    await saveCurrent(); isDirty = false;
+    if (mode !== "upgrades" && mode !== "gear") {
+      setMsg("Nothing for Franka to fill in on this tab.", ""); return;
+    }
+    const rows = mode === "upgrades" ? upgradeRows : gearRows;
+    const nameKey = mode === "upgrades" ? "item" : "name";
+    const descKey = mode === "upgrades" ? "why" : "note";
+    const blanks = rows.filter(r => r.url && (!String(r[nameKey]||"").trim() || !String(r[descKey]||"").trim() || !String(r.image_url||"").trim()));
+    if (!blanks.length) { setMsg("Saved. Nothing blank — every part already has a name, description and photo. 👍", "ok"); return; }
+    setMsg(`Saved. 🪄 Flagged ${blanks.length} part${blanks.length>1?"s":""} for Franka. She sweeps every 30 min, fills in names, descriptions and photos from the link, then texts Peter what got done. No need to do anything else.`, "ok");
+  } finally { btn.disabled = false; }
 });
 document.getElementById("reload").addEventListener("click", async () => {
   if (isDirty && !confirm("Discard unsaved changes and reload?")) return;
