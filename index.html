@@ -486,17 +486,36 @@ function tierCell(r, i) {
   return html;
 }
 
+// The four buckets the app renders a bike's parts into, in display order. A row's
+// bucket is derived from its category (Tools) or tier (everything else), so the
+// admin groups exactly the way the app does.
+const UPGRADE_SECTIONS = [
+  { key: "must", label: "Must have" },
+  { key: "rec",  label: "Highly recommended" },
+  { key: "nice", label: "Nice to have" },
+  { key: "tool", label: "Tools" },
+];
+function sectionOf(r) {
+  if (String(r.category || "").trim() === TOOLS_CATEGORY) return "tool";
+  const t = String(r.tier || "").trim();
+  if (t === "rec") return "rec";
+  if (t === "nice") return "nice";
+  return "must";
+}
+// Which section blocks are collapsed. Persists across re-renders within a session.
+let upgradeCollapsed = new Set();
+
 function renderUpgrades() {
   renderScopebar();
   const name = (BIKES.find(b => b.id === upgradeScope) || {}).name || upgradeScope;
-  hintEl.textContent = "Upgrades for: " + name + ". Universal upgrades apply to every bike on top of its bike-specific list.";
-  let html = `<div class="catblock"><h2>${esc(name)} (${upgradeRows.length})</h2>
-    <table><thead><tr>
+  hintEl.textContent = "Upgrades for: " + name + ". Grouped by section, click a header to collapse it. Universal upgrades apply to every bike on top of its bike-specific list.";
+  const thead = `<thead><tr>
       <th class="colid">id</th><th>item</th><th class="colwhy">why</th>
-      <th class="colnum">price $</th><th class="coltier sortable" data-sorttier="1">tier <span class="arrow">${tierSortDir === 1 ? "▲" : tierSortDir === -1 ? "▼" : "⇅"}</span></th><th>url</th><th>image url</th><th class="colimg">img</th><th class="colsearch">search</th><th class="colact"></th>
-    </tr></thead><tbody>`;
-  upgradeRows.forEach((r, i) => {
-    html += `<tr>
+      <th class="colnum">price $</th><th class="coltier">tier</th><th>url</th><th>image url</th><th class="colimg">img</th><th class="colsearch">search</th><th class="colact"></th>
+    </tr></thead>`;
+  const rowHtml = (r, si, slen) => {
+    const i = upgradeRows.indexOf(r);
+    return `<tr>
       <td class="colid"><input value="${esc(r.id)}" data-i="${i}" data-f="id"></td>
       <td><input value="${esc(r.item)}" data-i="${i}" data-f="item"></td>
       <td class="colwhy"><textarea rows="4" data-i="${i}" data-f="why">${esc(r.why)}</textarea></td>
@@ -507,13 +526,22 @@ function renderUpgrades() {
       <td class="colimg">${r.image_url ? `<img src="${esc(r.image_url)}" class="thumb" alt="" onerror="this.style.display='none';this.nextSibling.textContent='bad url';">` : ""}<span class="imgwarn">${r.image_url ? "" : "no image"}</span></td>
       <td class="colsearch"><input value="${esc(r.search)}" data-i="${i}" data-f="search"></td>
       <td class="act colact">
-        <button class="btn move" data-up="${i}" title="Move up"${i === 0 ? " disabled" : ""}>▲</button>
-        <button class="btn move" data-down="${i}" title="Move down"${i === upgradeRows.length - 1 ? " disabled" : ""}>▼</button>
+        <button class="btn move" data-up="${i}" title="Move up"${si === 0 ? " disabled" : ""}>▲</button>
+        <button class="btn move" data-down="${i}" title="Move down"${si === slen - 1 ? " disabled" : ""}>▼</button>
         <button class="btn danger" data-del="${i}">✕</button>
       </td>
     </tr>`;
+  };
+  let html = `<div class="catblock"><h2>${esc(name)} (${upgradeRows.length})</h2></div>`;
+  UPGRADE_SECTIONS.forEach(sec => {
+    const rows = upgradeRows.filter(r => sectionOf(r) === sec.key);
+    const collapsed = upgradeCollapsed.has(sec.key);
+    html += `<div class="catblock">
+      <h2 class="grouphdr collapser" data-collapse="${sec.key}"><span class="caret">${collapsed ? "▸" : "▾"}</span> ${sec.label} <span style="color:var(--muted);font-weight:700;font-size:12px">(${rows.length})</span></h2>
+      ${collapsed ? "" : `<table>${thead}<tbody>${rows.map((r, si) => rowHtml(r, si, rows.length)).join("")}</tbody></table>
+      <button class="btn add" data-addup="${sec.key}">+ Add ${sec.label} item</button>`}
+    </div>`;
   });
-  html += `</tbody></table><button class="btn add" data-addup="1">+ Add upgrade</button></div>`;
   contentEl.innerHTML = html;
   wireUpgradeInputs();
 }
@@ -555,19 +583,32 @@ function wireUpgradeInputs() {
   }));
   contentEl.querySelectorAll("[data-addup]").forEach(b => b.addEventListener("click", () => {
     const p = upgradeScope === "universal" ? "u" : upgradeScope;
-    upgradeRows.push({ id: uid(p), item: "", why: "", price_usd: "", tier: "rec", url: "", image_url: "", search: "", category: "" });
+    const sec = b.dataset.addup;
+    const row = { id: uid(p), item: "", why: "", price_usd: "", tier: "rec", url: "", image_url: "", search: "", category: "" };
+    if (sec === "tool") row.category = TOOLS_CATEGORY;
+    else if (sec === "must") row.tier = "must";
+    else if (sec === "nice") row.tier = "nice";
+    else row.tier = "rec";
+    upgradeRows.push(row);
+    upgradeCollapsed.delete(sec);   // make sure the section they're adding to is open
     renderUpgrades(); markDirty();
   }));
-  const tierHead = contentEl.querySelector("[data-sorttier]");
-  if (tierHead) tierHead.addEventListener("click", sortUpgradesByTier);
+  contentEl.querySelectorAll("[data-collapse]").forEach(h => h.addEventListener("click", () => {
+    const key = h.dataset.collapse;
+    if (upgradeCollapsed.has(key)) upgradeCollapsed.delete(key); else upgradeCollapsed.add(key);
+    renderUpgrades();
+  }));
   contentEl.querySelectorAll("[data-up]").forEach(b => b.addEventListener("click", () => moveUpgrade(+b.dataset.up, -1)));
   contentEl.querySelectorAll("[data-down]").forEach(b => b.addEventListener("click", () => moveUpgrade(+b.dataset.down, 1)));
 }
 
-// Swap a row with its neighbour to hand-arrange the exact order. The row order
+// Swap a row with its nearest neighbour in the SAME section, so reordering stays
+// inside a bucket instead of jumping a part into a different tier. The row order
 // shown here is what saves into sort_order, so this sets the app display order.
 function moveUpgrade(i, dir) {
-  const j = i + dir;
+  const sec = sectionOf(upgradeRows[i]);
+  let j = i + dir;
+  while (j >= 0 && j < upgradeRows.length && sectionOf(upgradeRows[j]) !== sec) j += dir;
   if (j < 0 || j >= upgradeRows.length) return;
   const t = upgradeRows[i]; upgradeRows[i] = upgradeRows[j]; upgradeRows[j] = t;
   renderUpgrades(); markDirty();
