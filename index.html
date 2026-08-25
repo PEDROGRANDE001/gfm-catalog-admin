@@ -443,7 +443,7 @@ async function loadUpgrades() {
     id: r.id, item: r.item || "", why: r.why || "",
     price_usd: r.price_usd == null ? "" : Number(r.price_usd),
     tier: r.tier || "", url: r.url || "", search: r.search || "",
-    image_url: r.image_url || "",
+    image_url: r.image_url || "", category: r.category || "",
   }));
   loadedIds = new Set(upgradeRows.map(r => r.id));
   removedIds = new Set();
@@ -468,14 +468,20 @@ function renderScopebar() {
 // Any legacy/nonstandard value is preserved as a selectable option until changed.
 const TIER_OPTIONS = ["must", "rec", "nice"];
 const TIER_LABELS = { must: "Must have", rec: "Highly recommended", nice: "Nice to have" };
+// The app files a part into the Tools section by its category, not its tier. So
+// "Tool" is a fourth choice in this dropdown: picking it stamps the row with the
+// Tools category the app looks for; picking any real tier clears that category.
+const TOOLS_CATEGORY = "Tools & recovery";
 function tierCell(r, i) {
+  const isTool = String(r.category || "").trim() === TOOLS_CATEGORY;
   const cur = (r.tier == null ? "" : String(r.tier)).trim();
   const known = TIER_OPTIONS.includes(cur);
-  let html = `<select class="tiersel" data-i="${i}" data-f="tier">`;
-  if (!known) html += `<option value="${esc(cur)}" selected>${cur ? esc(cur) : "— none —"}</option>`;
+  let html = `<select class="tiersel" data-i="${i}" data-f="section">`;
+  if (!isTool && !known) html += `<option value="${esc(cur)}" selected>${cur ? esc(cur) : "— none —"}</option>`;
   TIER_OPTIONS.forEach(o => {
-    html += `<option value="${o}" ${known && cur === o ? "selected" : ""}>${TIER_LABELS[o]}</option>`;
+    html += `<option value="${o}" ${!isTool && known && cur === o ? "selected" : ""}>${TIER_LABELS[o]}</option>`;
   });
+  html += `<option value="tool" ${isTool ? "selected" : ""}>Tool</option>`;
   html += `</select>`;
   return html;
 }
@@ -526,7 +532,16 @@ function wireUpgradeInputs() {
     el.addEventListener("change", () => {
       const i = +el.dataset.i, f = el.dataset.f;
       if (i == null || !f) return;
-      upgradeRows[i][f] = el.value;
+      if (f === "section") {
+        if (el.value === "tool") {
+          upgradeRows[i].category = TOOLS_CATEGORY;   // moves it to the Tools section
+        } else {
+          upgradeRows[i].tier = el.value;
+          upgradeRows[i].category = "";               // back to a normal tiered part
+        }
+      } else {
+        upgradeRows[i][f] = el.value;
+      }
       renderUpgrades();   // re-render so a normalized tier drops any legacy option
       markDirty();
     });
@@ -540,7 +555,7 @@ function wireUpgradeInputs() {
   }));
   contentEl.querySelectorAll("[data-addup]").forEach(b => b.addEventListener("click", () => {
     const p = upgradeScope === "universal" ? "u" : upgradeScope;
-    upgradeRows.push({ id: uid(p), item: "", why: "", price_usd: "", tier: "rec", url: "", image_url: "", search: "" });
+    upgradeRows.push({ id: uid(p), item: "", why: "", price_usd: "", tier: "rec", url: "", image_url: "", search: "", category: "" });
     renderUpgrades(); markDirty();
   }));
   const tierHead = contentEl.querySelector("[data-sorttier]");
@@ -608,6 +623,7 @@ async function saveUpgrades() {
     const row = {
       id: r.id.trim(), bike_id: bikeId,
       tier: r.tier || null, url: r.url || null, search: r.search || null, sort_order: i,
+      category: String(r.category || "").trim() || null,
     };
     if (item || !existing) row.item = item;
     if (why || !existing) row.why = why;
