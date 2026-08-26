@@ -1270,7 +1270,7 @@ document.getElementById("askfranka").addEventListener("click", async () => {
     const descKey = mode === "upgrades" ? "why" : "note";
     const blanks = rows.filter(r => r.url && (!String(r[nameKey]||"").trim() || !String(r[descKey]||"").trim() || !String(r.image_url||"").trim()));
     if (!blanks.length) { setMsg("Saved. Nothing blank — every part already has a name, description and photo. 👍", "ok"); return; }
-    setMsg(`Saved. 🪄 Flagged ${blanks.length} part${blanks.length>1?"s":""} for Franka. She sweeps every 30 min, fills in names, descriptions and photos from the link, then texts Peter what got done. No need to do anything else.`, "ok");
+    setMsg(`Saved. 🪄 Flagged ${blanks.length} part${blanks.length>1?"s":""} for Franka. She sweeps every 30 min, fills in names, descriptions and photos from the link. No need to do anything else.`, "ok");
   } finally { btn.disabled = false; }
 });
 document.getElementById("reload").addEventListener("click", async () => {
