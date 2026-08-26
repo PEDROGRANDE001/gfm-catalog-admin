@@ -655,33 +655,53 @@ async function saveUpgrades() {
     if (error) { setMsg("Delete failed: " + error.message, "err"); return; }
   }
   const bikeId = upgradeScope === "universal" ? null : upgradeScope;
-  // Only overwrite item / why / image / price when this page actually has a
-  // value for them. For an EXISTING row that's blank here we OMIT those columns
-  // so the upsert can't wipe a name, description, photo or price that Franka's
-  // sweep filled in after this page was loaded. Brand-new rows (not yet in the
-  // DB) always send them so the insert satisfies the column defaults.
-  const payload = upgradeRows.map((r, i) => {
-    const existing = loadedIds.has(r.id.trim());
+  // We split the save into UPDATEs (existing rows) and INSERTs (new rows).
+  // Why not a single upsert: an upsert always builds an INSERT tuple first, and
+  // if item/why are omitted that tuple is NULL, which trips the NOT NULL columns
+  // BEFORE the on-conflict update can run. So one blank existing row would kill
+  // the whole batch. UPDATEs have no insert phase, so we can safely OMIT blank
+  // item / why / image / price on existing rows (never clobbering a name, photo
+  // or price that Franka's sweep filled in after this page loaded). New rows are
+  // INSERTed with empty strings so they satisfy the NOT NULL columns while still
+  // reading as "blank" for the sweep to backfill later.
+  const inserts = [];
+  for (let i = 0; i < upgradeRows.length; i++) {
+    const r = upgradeRows[i];
+    const id = r.id.trim();
+    const existing = loadedIds.has(id);
     const item = String(r.item || "").trim();
     const why = String(r.why || "").trim();
     const img = String(r.image_url || "").trim();
     const hasPrice = r.price_usd !== "" && r.price_usd != null;
-    const row = {
-      id: r.id.trim(), bike_id: bikeId,
+    const base = {
+      id, bike_id: bikeId,
       tier: r.tier || null, url: r.url || null, search: r.search || null, sort_order: i,
       category: String(r.category || "").trim() || null,
     };
-    if (item || !existing) row.item = item;
-    if (why || !existing) row.why = why;
-    if (img) row.image_url = img; else if (!existing) row.image_url = null;
-    if (hasPrice) row.price_usd = Number(r.price_usd) || 0; else if (!existing) row.price_usd = null;
-    return row;
-  });
-  const { error } = await sb.from("bike_upgrades").upsert(payload);
-  if (error) { setMsg("Save failed: " + error.message, "err"); return; }
+    if (existing) {
+      const upd = { ...base };
+      if (item) upd.item = item;         // omit blanks so we never wipe a filled value
+      if (why) upd.why = why;
+      if (img) upd.image_url = img;
+      if (hasPrice) upd.price_usd = Number(r.price_usd) || 0;
+      const { error } = await sb.from("bike_upgrades").update(upd).eq("id", id);
+      if (error) { setMsg("Save failed: " + error.message, "err"); return; }
+    } else {
+      inserts.push({
+        ...base,
+        item, why,                        // always "" at worst, never null
+        image_url: img || null,
+        price_usd: hasPrice ? Number(r.price_usd) || 0 : null,
+      });
+    }
+  }
+  if (inserts.length) {
+    const { error } = await sb.from("bike_upgrades").insert(inserts);
+    if (error) { setMsg("Save failed: " + error.message, "err"); return; }
+  }
   const missing = upgradeRows.filter(r => !String(r.item||"").trim() || !String(r.why||"").trim() || !String(r.image_url||"").trim()).length;
   const tail = missing ? ` ${missing} still need a name, description or photo — hit "Ask Franka to fill blanks" and she'll complete them on her next sweep (usually under 30 min).` : "";
-  setMsg("Saved " + payload.length + " upgrades. Live on phones now." + tail, "ok");
+  setMsg("Saved " + upgradeRows.length + " upgrades. Live on phones now." + tail, "ok");
   await loadUpgrades();
 }
 
