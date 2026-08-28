@@ -245,9 +245,10 @@ const SUPABASE_ANON_KEY = "sb_publishable_7z5_6oZEVl-poPycyYJ1zA_FjdebGQZ";
 const KIT_CATEGORIES = [
   { id: "gear", label: "Riding Gear" },
   { id: "helmets_comms", label: "Helmets & Comms" },
-  { id: "luggage", label: "Luggage" },
   { id: "electronics", label: "Electronics" },
+  { id: "luggage", label: "Luggage" },
   { id: "camping", label: "Camping" },
+  { id: "emergency_medical", label: "Emergency & Medical" },
 ];
 
 const BIKES = [
@@ -353,6 +354,18 @@ async function loadGear() {
   renderGear();
 }
 
+function gearCatCell(r, i) {
+  const cur = String(r.category || "").trim();
+  const known = KIT_CATEGORIES.some(c => c.id === cur);
+  let html = `<select class="tiersel" data-i="${i}" data-f="category">`;
+  if (!known) html += `<option value="${esc(cur)}" selected>${cur ? esc(cur) : "— none —"}</option>`;
+  KIT_CATEGORIES.forEach(c => {
+    html += `<option value="${c.id}" ${known && cur === c.id ? "selected" : ""}>${esc(c.label)}</option>`;
+  });
+  html += `</select>`;
+  return html;
+}
+
 function renderGear() {
   scopebarEl.style.display = "none";
   hintEl.textContent = "Edit any cell. Click a header to collapse it. Rows save in the order shown (top to bottom). Add rows per category, delete with ✕. Changes push live to phones on Save.";
@@ -367,7 +380,7 @@ function renderGear() {
     if (!collapsed) {
       html += `<table><thead><tr>
         <th class="colid">id</th><th>name</th><th>note</th>
-        <th class="colnum">price $</th><th>url</th><th class="colsearch">search</th>
+        <th class="colnum">price $</th><th class="coltier">category</th><th>url</th><th class="colsearch">search</th>
         <th class="colchk">opt</th><th class="colchk">spec</th><th class="coltier">slot</th><th class="colact"></th>
       </tr></thead><tbody>`;
       rows.forEach(r => {
@@ -377,6 +390,7 @@ function renderGear() {
         <td><input value="${esc(r.name)}" data-i="${i}" data-f="name"></td>
         <td><textarea rows="2" data-i="${i}" data-f="note">${esc(r.note)}</textarea></td>
         <td class="num colnum"><input type="number" step="1" value="${r.price_usd}" data-i="${i}" data-f="price_usd"></td>
+        <td class="coltier">${gearCatCell(r, i)}</td>
         <td><input value="${esc(r.url)}" data-i="${i}" data-f="url"></td>
         <td class="colsearch"><input value="${esc(r.search)}" data-i="${i}" data-f="search"></td>
         <td class="chk colchk"><input type="checkbox" ${r.optional ? "checked" : ""} data-i="${i}" data-f="optional"></td>
@@ -403,6 +417,14 @@ function wireGearInputs() {
       else if (f === "price_usd") gearRows[i][f] = Number(el.value) || 0;
       else gearRows[i][f] = el.value;
       markDirty();
+    });
+  });
+  contentEl.querySelectorAll("select[data-f]").forEach(el => {
+    el.addEventListener("change", () => {
+      const i = +el.dataset.i, f = el.dataset.f;
+      if (i == null || !f) return;
+      gearRows[i][f] = el.value;   // move the row into the chosen category block
+      renderGear(); markDirty();
     });
   });
   contentEl.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", () => {
