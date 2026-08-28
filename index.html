@@ -319,6 +319,7 @@ let taskSortByOwner = false; // sort each group by assigned owner
 let taskMineOnly = false;    // "My Tasks only" filter toggle
 let taskOwnerFilter = "";    // whose tasks to show when the filter is on
 let taskCollapsed = new Set(); // category keys whose block is collapsed
+let gearCollapsed = new Set(); // gear category ids whose block is collapsed
 let pendingFocusId = null;   // after a re-render, focus this row's detail textarea
 let removedIds = new Set(); // ids deleted in this session, per table flush
 let loadedIds = new Set();  // ids that existed on load (to detect removals)
@@ -353,22 +354,24 @@ async function loadGear() {
 
 function renderGear() {
   scopebarEl.style.display = "none";
-  hintEl.textContent = "Edit any cell. Rows save in the order shown (top to bottom). Add rows per category, delete with ✕. Changes push live to phones on Save.";
+  hintEl.textContent = "Edit any cell. Click a header to collapse it. Rows save in the order shown (top to bottom). Add rows per category, delete with ✕. Changes push live to phones on Save.";
   const byCat = {};
   KIT_CATEGORIES.forEach(c => byCat[c.id] = []);
   gearRows.forEach(r => { (byCat[r.category] ||= []).push(r); });
   let html = "";
   KIT_CATEGORIES.forEach(cat => {
     const rows = byCat[cat.id] || [];
-    html += `<div class="catblock"><h2>${cat.label} (${rows.length})</h2>
-      <table><thead><tr>
+    const collapsed = gearCollapsed.has(cat.id);
+    html += `<div class="catblock"><h2 class="grouphdr collapser" data-collapse="${cat.id}"><span class="caret">${collapsed ? "▸" : "▾"}</span> ${cat.label} <span style="color:var(--muted);font-weight:700;font-size:12px">(${rows.length})</span></h2>`;
+    if (!collapsed) {
+      html += `<table><thead><tr>
         <th class="colid">id</th><th>name</th><th>note</th>
         <th class="colnum">price $</th><th>url</th><th class="colsearch">search</th>
         <th class="colchk">opt</th><th class="colchk">spec</th><th class="coltier">slot</th><th class="colact"></th>
       </tr></thead><tbody>`;
-    rows.forEach(r => {
-      const i = gearRows.indexOf(r);
-      html += `<tr>
+      rows.forEach(r => {
+        const i = gearRows.indexOf(r);
+        html += `<tr>
         <td class="colid"><input value="${esc(r.id)}" data-i="${i}" data-f="id"></td>
         <td><input value="${esc(r.name)}" data-i="${i}" data-f="name"></td>
         <td><textarea rows="2" data-i="${i}" data-f="note">${esc(r.note)}</textarea></td>
@@ -380,9 +383,11 @@ function renderGear() {
         <td class="coltier"><input value="${esc(r.slot)}" data-i="${i}" data-f="slot"></td>
         <td class="act colact"><button class="btn danger" data-del="${i}" data-t="gear">✕</button></td>
       </tr>`;
-    });
-    html += `</tbody></table>
-      <button class="btn add" data-add="${cat.id}">+ Add ${cat.label} item</button></div>`;
+      });
+      html += `</tbody></table>
+      <button class="btn add" data-add="${cat.id}">+ Add ${cat.label} item</button>`;
+    }
+    html += `</div>`;
   });
   contentEl.innerHTML = html;
   wireGearInputs();
@@ -409,8 +414,14 @@ function wireGearInputs() {
   }));
   contentEl.querySelectorAll("[data-add]").forEach(b => b.addEventListener("click", () => {
     const cat = b.dataset.add;
+    gearCollapsed.delete(cat);   // keep the section they're adding to open
     gearRows.push({ id: uid(cat), category: cat, name: "", note: "", price_usd: 0, url: "", search: "", optional: false, specific: false, slot: "" });
     renderGear(); markDirty();
+  }));
+  contentEl.querySelectorAll("[data-collapse]").forEach(h => h.addEventListener("click", () => {
+    const key = h.dataset.collapse;
+    if (gearCollapsed.has(key)) gearCollapsed.delete(key); else gearCollapsed.add(key);
+    renderGear();
   }));
 }
 
