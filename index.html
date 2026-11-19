@@ -182,6 +182,11 @@
     border-radius: 9px; padding: 11px; font: inherit; font-weight: 800; cursor: pointer;
   }
   #gate .err { color: var(--danger); font-size: 12px; min-height: 16px; margin-top: 10px; }
+  #gate .alt { margin-top: 14px; font-size: 12px; }
+  #gate .alt a { color: var(--muted); cursor: pointer; text-decoration: underline; }
+  header .who { font-size: 12px; color: var(--muted); display: flex; gap: 8px; align-items: center; }
+  header .who button { background: none; border: 1px solid var(--line); color: var(--muted);
+    border-radius: 7px; padding: 4px 9px; font: inherit; font-size: 12px; cursor: pointer; }
   body.locked { overflow: hidden; }
 </style>
 </head>
@@ -189,10 +194,18 @@
 <div id="gate">
   <div class="box">
     <h2>Trans American Trail</h2>
-    <p>Admin. Enter the passcode to continue.</p>
-    <input id="gate-input" type="password" placeholder="Passcode" autocomplete="off" />
-    <button id="gate-go">Enter</button>
+    <p id="gate-sub">Admin. Sign in with your admin email and password.</p>
+    <form id="login-form" autocomplete="on">
+      <input id="login-email" type="email" placeholder="Email" autocomplete="username" />
+      <input id="login-pass" type="password" placeholder="Password" autocomplete="current-password" />
+      <button id="login-go" type="submit">Sign in</button>
+    </form>
+    <div id="pass-form" style="display:none">
+      <input id="gate-input" type="password" placeholder="Passcode" autocomplete="off" />
+      <button id="gate-go">Enter</button>
+    </div>
     <div class="err" id="gate-err"></div>
+    <div class="alt"><a id="gate-switch">Use the old passcode instead</a></div>
   </div>
 </div>
 <header>
@@ -207,6 +220,7 @@
     <button class="tab" id="tab-recs">Recommendations</button>
   </div>
   <span class="status" id="status">connecting…</span>
+  <span class="who" id="who" style="display:none"><span id="who-email"></span><button id="signout">Sign out</button></span>
 </header>
 
 <main>
@@ -1548,15 +1562,22 @@ document.getElementById("note-save").addEventListener("click", async () => {
   setMsg("Note saved.", "ok");
 });
 
-// ---------------- passcode gate ----------------
-// Simple shared-passcode gate. This keeps casual visitors out of the editor.
-// It is NOT hard security: the page talks to Supabase with the public anon key,
-// so real lockdown would need Supabase Auth + tighter RLS. Change PASSCODE below
-// (and re-deploy) any time.
+// ---------------- sign-in gate ----------------
+// Real access control lives in the database (row level security): reading
+// tasks and every write need a signed-in Supabase Auth user whose email is in
+// public.catalog_admins. Once signed in, every query on this page runs with
+// that user's session (supabase-js keeps it in localStorage and refreshes it).
+//
+// The old shared passcode is kept as a fallback only until the lockdown SQL is
+// applied. After that, passcode mode can still view the catalog but saving
+// fails, and the page says so. Remove the passcode path once everyone has a login.
 const PASSCODE = "1962";
 const GATE_KEY = "gfm.admin.unlocked.v1";
+let booted = false;
 
 function boot() {
+  if (booted) return;
+  booted = true;
   if (!SUPABASE_URL || SUPABASE_URL.indexOf("__") === 0) {
     setStatus("not configured", "err");
     contentEl.innerHTML = "<p style='color:#ff5a5a'>Supabase keys were not injected. Regenerate this page.</p>";
@@ -1571,24 +1592,102 @@ function unlock() {
   boot();
 }
 
+function showWho(email) {
+  const who = document.getElementById("who");
+  if (email) {
+    document.getElementById("who-email").textContent = email;
+    document.getElementById("signout").textContent = "Sign out";
+  } else {
+    document.getElementById("who-email").textContent = "Passcode mode: saving needs a sign-in";
+    document.getElementById("signout").textContent = "Sign in";
+  }
+  who.style.display = "";
+}
+
+// Before the lockdown SQL runs the is_catalog_admin function doesn't exist, so
+// an error here means "can't tell yet" and the user is let in.
+async function checkAdmin() {
+  const { data, error } = await sb.rpc("is_catalog_admin");
+  if (error) return true;
+  return data !== false;
+}
+
 (function initGate() {
-  const gate = document.getElementById("gate");
-  const input = document.getElementById("gate-input");
   const err = document.getElementById("gate-err");
-  const go = document.getElementById("gate-go");
-  if (localStorage.getItem(GATE_KEY) === PASSCODE) { unlock(); return; }
-  function attempt() {
-    if (input.value === PASSCODE) {
+  const loginForm = document.getElementById("login-form");
+  const passForm = document.getElementById("pass-form");
+  const sub = document.getElementById("gate-sub");
+  const sw = document.getElementById("gate-switch");
+  const emailEl = document.getElementById("login-email");
+  const passEl = document.getElementById("login-pass");
+  const passcodeEl = document.getElementById("gate-input");
+  let passcodeMode = false;
+
+  sw.addEventListener("click", () => {
+    passcodeMode = !passcodeMode;
+    loginForm.style.display = passcodeMode ? "none" : "";
+    passForm.style.display = passcodeMode ? "" : "none";
+    sub.textContent = passcodeMode
+      ? "Old shared passcode. Stops working for saving once the database is locked down."
+      : "Admin. Sign in with your admin email and password.";
+    sw.textContent = passcodeMode ? "Sign in with email instead" : "Use the old passcode instead";
+    err.textContent = "";
+    (passcodeMode ? passcodeEl : emailEl).focus();
+  });
+
+  loginForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById("login-go");
+    err.textContent = "";
+    btn.disabled = true; btn.textContent = "Signing in…";
+    try {
+      const { data, error } = await sb.auth.signInWithPassword({
+        email: emailEl.value.trim().toLowerCase(),
+        password: passEl.value,
+      });
+      if (error) { err.textContent = error.message; return; }
+      if (!(await checkAdmin())) {
+        await sb.auth.signOut();
+        err.textContent = "That account is not on the admin list.";
+        return;
+      }
+      passEl.value = "";
+      showWho(data.user && data.user.email);
+      unlock();
+    } finally {
+      btn.disabled = false; btn.textContent = "Sign in";
+    }
+  });
+
+  function attemptPasscode() {
+    if (passcodeEl.value === PASSCODE) {
       try { localStorage.setItem(GATE_KEY, PASSCODE); } catch (e) {}
+      showWho(null);
       unlock();
     } else {
       err.textContent = "Wrong passcode.";
-      input.value = ""; input.focus();
+      passcodeEl.value = ""; passcodeEl.focus();
     }
   }
-  go.addEventListener("click", attempt);
-  input.addEventListener("keydown", (e) => { if (e.key === "Enter") attempt(); });
-  input.focus();
+  document.getElementById("gate-go").addEventListener("click", attemptPasscode);
+  passcodeEl.addEventListener("keydown", (e) => { if (e.key === "Enter") attemptPasscode(); });
+
+  document.getElementById("signout").addEventListener("click", async () => {
+    if (isDirty && !confirm("Discard unsaved changes?")) return;
+    isDirty = false;
+    try { await sb.auth.signOut(); } catch (e) {}
+    try { localStorage.removeItem(GATE_KEY); } catch (e) {}
+    location.reload();
+  });
+
+  sb.auth.getSession().then(({ data }) => {
+    const session = data && data.session;
+    if (session) { showWho(session.user && session.user.email); unlock(); return; }
+    let legacy = null;
+    try { legacy = localStorage.getItem(GATE_KEY); } catch (e) {}
+    if (legacy === PASSCODE) { showWho(null); unlock(); return; }
+    emailEl.focus();
+  });
 })();
 </script>
 </body>
