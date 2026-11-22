@@ -355,6 +355,12 @@ let taskOwnerFilter = "";    // whose tasks to show when the filter is on
 let taskCollapsed = new Set(); // category keys whose block is collapsed
 let gearCollapsed = new Set(); // gear category ids whose block is collapsed
 let destRows = [];          // working copy of the destinations table
+let destHasContact = false; // true once the 2026-11-22 contact columns exist in the table
+const STOP_STATUSES = [
+  { id: "open", label: "Open" },
+  { id: "closed", label: "Closed (hidden in app)" },
+  { id: "not_tat_friendly", label: "Not TAT friendly" },
+];
 let destGroup = "attractions"; // "attractions" (kind=detour) | "stops" (everything else)
 let destCollapsed = new Set(); // state codes whose block is collapsed
 let pendingFocusId = null;   // after a re-render, focus this row's detail textarea
@@ -527,7 +533,10 @@ async function loadDests() {
     lat: r.lat == null ? 0 : Number(r.lat), dwell_min: r.dwell_min == null ? 60 : Number(r.dwell_min),
     why: r.why || "", address: r.address || "", image_url: r.image_url || "",
     image_credit: r.image_credit || "",
+    phone: r.phone || "", website: r.website || "", notes: r.notes || "",
+    status: r.status || "open", contact_verified: !!r.contact_verified,
   }));
+  destHasContact = !!(data && data.length && Object.prototype.hasOwnProperty.call(data[0], "phone"));
   loadedIds = new Set(destRows.map(r => r.id));
   removedIds = new Set();
   const shown = destRows.filter(destInGroup).length;
@@ -556,6 +565,16 @@ function destStateCell(r, i) {
   return html;
 }
 
+function destStatusCell(r, i) {
+  const cur = r.status || "open";
+  let html = `<select class="tiersel" data-i="${i}" data-f="status">`;
+  STOP_STATUSES.forEach(s => {
+    html += `<option value="${s.id}" ${cur === s.id ? "selected" : ""}>${esc(s.label)}</option>`;
+  });
+  html += `</select>`;
+  return html;
+}
+
 function renderDests() {
   scopebarEl.style.display = "none";
   hintEl.textContent = destGroup === "attractions"
@@ -579,7 +598,9 @@ function renderDests() {
         <th class="colid">id</th><th>name</th><th class="coltier">state</th><th class="coltier">kind</th>
         <th>category</th><th>address</th><th>why</th>
         <th class="colnum">lat</th><th class="colnum">lng</th><th class="colnum">dwell</th>
-        <th>image url</th><th>image credit</th><th class="colact"></th>
+        <th>image url</th><th>image credit</th>
+        ${destHasContact ? `<th>phone</th><th>website</th><th class="coltier">status</th><th>verified</th><th>rider notes</th>` : ""}
+        <th class="colact"></th>
       </tr></thead><tbody>`;
       list.forEach(r => {
         const i = destRows.indexOf(r);
@@ -596,6 +617,12 @@ function renderDests() {
         <td class="num colnum"><input type="number" step="5" value="${r.dwell_min}" data-i="${i}" data-f="dwell_min"></td>
         <td><input value="${esc(r.image_url)}" data-i="${i}" data-f="image_url"></td>
         <td><input value="${esc(r.image_credit)}" data-i="${i}" data-f="image_credit"></td>
+        ${destHasContact ? `
+        <td><input value="${esc(r.phone)}" data-i="${i}" data-f="phone" placeholder="(555) 555-5555"></td>
+        <td><input value="${esc(r.website)}" data-i="${i}" data-f="website" placeholder="https://"></td>
+        <td class="coltier">${destStatusCell(r, i)}</td>
+        <td style="text-align:center"><input type="checkbox" ${r.contact_verified ? "checked" : ""} data-i="${i}" data-f="contact_verified" title="Contact details confirmed"></td>
+        <td><textarea rows="2" data-i="${i}" data-f="notes" placeholder="closed Sundays, ask for Brian">${esc(r.notes)}</textarea></td>` : ""}
         <td class="act colact"><button class="btn danger" data-del="${i}" data-t="dest">✕</button></td>
       </tr>`;
       });
@@ -616,6 +643,7 @@ function wireDestInputs() {
       const i = +el.dataset.i, f = el.dataset.f;
       if (isNaN(i) || !f) return;
       if (f === "lat" || f === "lng" || f === "dwell_min") destRows[i][f] = Number(el.value) || 0;
+      else if (el.type === "checkbox") destRows[i][f] = el.checked;
       else destRows[i][f] = el.value;
       markDirty();
     });
@@ -644,6 +672,7 @@ function wireDestInputs() {
       id: uid(destGroup === "attractions" ? "det" : "svc"), name: "", state: st,
       category: "", kind, lng: 0, lat: 0, dwell_min: 60, why: "", address: "",
       image_url: "", image_credit: "",
+      phone: "", website: "", notes: "", status: "open", contact_verified: false,
     });
     renderDests(); markDirty();
   }));
@@ -669,6 +698,10 @@ async function saveDests() {
     lng: Number(r.lng) || 0, lat: Number(r.lat) || 0, dwell_min: Number(r.dwell_min) || 0,
     why: r.why || null, address: r.address || null, image_url: r.image_url || null,
     image_credit: r.image_credit || null, sort_order: i,
+    ...(destHasContact ? {
+      phone: r.phone || null, website: r.website || null, notes: r.notes || null,
+      status: r.status || "open", contact_verified: !!r.contact_verified,
+    } : {}),
   }));
   const { error } = await sb.from("destinations").upsert(payload);
   if (error) { setMsg("Save failed: " + error.message, "err"); return; }
